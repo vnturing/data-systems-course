@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The timeout problem · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/delivery-semantics.html">Reference sheet</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 0 · Lesson 1</p>
+<h1>The timeout problem</h1>
+<p class="lede">The first thing that separates a distributed system from a single machine: sometimes you ask a question and the answer is silence.</p>
+<div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span><span>Reference sheet included</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Look at any "call another service and retry on failure" code path and say, with a precise argument, whether a retry can duplicate or lose work, and which fix applies.</div>
+
+<h2>1. A story you have probably already lived</h2>
+<p>Your checkout service calls a payment API: <code>charge(customer, $50)</code>. Two seconds pass. Your HTTP client raises a timeout exception. What does your code do next?</p>
+<p>On a single machine, a function call returns a value or throws an error, and you know the function either ran or didn't. Across a network, there is a third outcome: <b>you don't know</b>. Production incidents that involve double charges, duplicate emails, and "ghost" orders overwhelmingly start with someone treating that third outcome as if it were the second.</p>
+
+<h2>2. What a timeout actually tells you</h2>
+<p>A timeout carries exactly one fact: <i>no reply arrived within the time you were willing to wait.</i> It says nothing about whether the request arrived, whether the server did the work, or whether the reply is still on its way. Courses on remote procedure calls make this the starting point: a retry after a timeout fixes a lost request, but it is exactly the wrong move if the server already did the work and only the reply was lost.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<span class="sidenote">The network is only one suspect. A server paused by garbage collection or a saturated queue looks identical from outside. Module 8 returns to this: you cannot distinguish "dead" from "slow" by waiting.</span>
+<p>Try it. Commit to a prediction first; the learning comes from being wrong in a place where it's cheap.</p>
+
+<div class="widget" id="sim-worlds"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>The design consequence</h3>
+<p>Because the client cannot distinguish these worlds, <b>no client-side logic alone</b> can make a non-idempotent operation safe to retry. The fix has to involve the server remembering what it did. That's the whole lesson in one sentence; the rest is how to do it correctly and where it breaks.</p>
+
+<h2>3. Three postures when you hit a timeout</h2>
+<table>
+<tr><th>Posture</th><th>What you do on timeout</th><th>Failure it risks</th></tr>
+<tr><td><b>At-most-once</b></td><td>Don't retry; report an error</td><td>Work may have happened while you report failure. Work may be silently lost.</td></tr>
+<tr><td><b>At-least-once</b></td><td>Retry until you get an answer</td><td>Work may happen several times. A retried "debit $10" debits twice.<sup class="c"><a href="#s1">[1]</a></sup></td></tr>
+<tr><td><b>Exactly-once <i>effect</i></b></td><td>Retry, but make repeats harmless</td><td>Needs server-side memory, which has its own failure modes (section 5).</td></tr>
+</table>
+<p>"Exactly-once delivery" is not something a network gives you. What you can build is <b>at-least-once delivery plus duplicate suppression</b>, which yields exactly-once <i>effect</i>. The lecture material on RPC states the recipe plainly: retransmission, plus duplicate filtering keyed by a unique request ID, plus a server that survives crashes without forgetting, and it flags that this breaks down when the operation has external side effects outside the system's control.<sup class="c"><a href="#s1">[1]</a></sup></p>
+
+<div class="widget" id="sim-lab"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>Spend a few minutes on the matrix. Find the one row where every cell is green, then find the row that looks nearly as good but contains a red cell. That second row is the subject of section 5.</p>
+
+<h2>4. How idempotency keys work in production</h2>
+<p>Stripe's API is the best-documented example in industry. The client generates a unique key per <i>logical</i> operation and sends it as an <code>Idempotency-Key</code> header. The server saves the status code and body of the first request made with that key and returns the saved result for any later request with the same key, <i>including errors such as 500</i>.<sup class="c"><a href="#s2">[2]</a></sup> Several details in their documentation are worth studying because each encodes a lesson about the design:</p>
+<ul>
+<li><b>The key identifies the operation, not the attempt.</b> One logical charge, one key, reused across retries. A fresh key per attempt gives you no protection at all (it is just a blind retry with extra steps).</li>
+<li><b>Parameters are compared.</b> If a retry arrives with the same key but different parameters, the server errors instead of guessing; this catches a caller bug where a key gets reused for a different request.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li><b>Keys can expire.</b> Keys may be pruned after at least 24 hours, so a retry after that window would be treated as a new request. Retry windows must be shorter than key retention.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li><b>Concurrent duplicates need a story.</b> If the original request is still executing when the retry arrives, the server must wait, reject, or otherwise avoid running the handler twice. The Princeton lecture calls this out as a distinct problem and suggests a "pending" marker per in-flight request.<sup class="c"><a href="#s1">[1]</a></sup> Stripe's docs note that results are not saved when a request conflicts with another one executing concurrently, and that such requests can be retried.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li><b>Safe verbs need no key.</b> GET and DELETE are idempotent by definition in their API; keys matter for POST.<sup class="c"><a href="#s2">[2]</a></sup></li>
+</ul>
+
+<h2>5. The part almost everyone gets wrong</h2>
+<p>The fourth row of the lab, "key saved in a separate step before the charge", is the most instructive. The server records "I handled key K1", then crashes before charging. The retry finds the key, concludes the work is done, and tells the client <i>success</i>. The customer was never charged, the client believes they were, and no error was ever raised. <b>A false success is strictly worse than a false failure</b>, because nothing triggers an investigation.</p>
+<p>The rule: <b>the idempotency record and the effect it protects must commit atomically</b>, typically in the same database transaction, so a crash leaves both or neither. The same lecture makes the underlying point with an ATM: if "log the operation" and "dispense the cash" are separate actions, a crash between them leaves you unable to know which happened, and exactly-once cannot be achieved in general when external actions are involved.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<div class="callout warn"><b class="t">The honest limit</b>
+If your effect is outside your transaction boundary (an email sent, a card network call, a physical device), you cannot make key + effect atomic. The practical answer is to push idempotency to the downstream system (pass <i>its</i> idempotency key through), or to reconcile afterward by querying actual state. Module 7 (transactions) and Module 11 (exactly-once in stream processing) build on exactly this.</div>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0001"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"A client sends a payment request and sees no reply before its timeout. Which statement is guaranteed true?",
+ "options":["The server received the request but crashed before replying.","The network dropped the request before reaching the server.","The client cannot tell whether the server executed anything.","The server is down so the charge never happened."],
+ "answer":2,"why":"Every one of the other worlds is possible, but none is guaranteed. A timeout reports only that nothing arrived in time."},
+{"q":"Which retry policy can charge a customer twice?",
+ "options":["Retry blindly with the same payload.","Never retry and give up immediately.","Retry using one stable idempotency key.","Retry only after querying charge status."],
+ "answer":0,"why":"If the first attempt committed but its reply was lost or slow, a blind retry commits again. The other three either don't repeat the effect or detect it first."},
+{"q":"Why must the idempotency key and the charge commit together?",
+ "options":["Keys expire quickly, so charges must finish sooner.","Databases refuse to store keys without a charge.","Separate stores always return stale reads to clients.","A crash between them causes silent lost charges."],
+ "answer":3,"why":"If the key is saved but the charge never lands, the retry is told it already succeeded. Atomic commit makes a crash leave both or neither."},
+{"q":"Your HTTP client auto-retries POST /orders on timeout. What is the most likely production symptom?",
+ "options":["Orders silently vanish whenever the network gets slow.","Occasional duplicate orders that correlate with latency spikes.","Every order is duplicated exactly once without exception.","Duplicates appear only during nightly scheduled maintenance windows."],
+ "answer":1,"why":"Duplicates require the first attempt to have succeeded while its reply was late or lost, which is more likely when latency spikes. That makes them intermittent and correlated with slowness, which is why they are so hard to notice."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<h2>7. Do this at work this week</h2>
+<ol>
+<li>Grep your codebase for HTTP client retry configuration (library-level auto-retry counts). List every <b>POST</b> endpoint that is retried.</li>
+<li>For each, answer: if the first attempt succeeded and its reply was lost, what happens on the retry? Write the answer down; don't answer from memory of how you <i>meant</i> it to work.</li>
+<li>Pick the worst one. Check whether the downstream API accepts an idempotency key. If yes, generate the key once per <i>logical</i> operation (persisted before the first attempt) and reuse it on every retry.</li>
+<li>If you own the downstream service, check that its dedupe record and its effect commit in one transaction.</li>
+</ol>
+<p>Bring what you find to the next lesson. Real findings make every later module concrete.</p>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Princeton COS 418, lecture 4 &ldquo;RPCs and failures&rdquo;. At-least-once and its side effects, at-most-once with unique request IDs, server crash and durable tables, concurrent duplicate requests, exactly-once with external actions. <a href="https://www.cs.princeton.edu/courses/archive/fall25/cos418/docs/L4-rpc-failure.pdf">cs.princeton.edu/.../L4-rpc-failure.pdf</a></li>
+<li id="s2">Stripe API documentation, &ldquo;Idempotent requests&rdquo;. Key semantics, saved responses, parameter comparison, key pruning, behavior under concurrency. <a href="https://docs.stripe.com/api/idempotent_requests">docs.stripe.com/api/idempotent_requests</a> (documentation changes over time; check it for current behavior).</li>
+<li id="s3">Martin Kleppmann, <i>Distributed Systems</i> lecture series (Cambridge, 8 lectures plus notes). For this lesson: 1.3 RPC and 5.1 Replication (retrying state updates, idempotence). Notes: <a href="https://www.cl.cam.ac.uk/teaching/2122/ConcDisSys/dist-sys-notes.pdf">dist-sys-notes.pdf</a>. Course overview: <a href="https://martin.kleppmann.com/2020/11/18/distributed-systems-and-elliptic-curves.html">announcement post</a>. <i>Further reading; the claims above are not taken from these.</i></li>
+</ol>
+
+<div class="pager"><a href="../index.html">&larr; Course home</a><a href="../syllabus.html">Next: see the full syllabus &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-timeout.js"></script>
+</body></html>

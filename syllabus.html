@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Syllabus · Data Systems Field Course</title>
+<link rel="stylesheet" href="assets/course.css"><script src="assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="index.html">Data Systems Field Course</a><a href="syllabus.html">Syllabus</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main class="wide">
+<p class="kicker">Syllabus</p>
+<h1>The full map</h1>
+<p class="lede">Thirteen modules, about 80 lessons, three capstone design reviews. Each lesson is short (20 to 40 minutes), ends with a retrieval check, and names something you can do at work. <span class="status-built">&#10003; built</span> lessons are live; <span class="status-planned">&#9675; planned</span> ones are scoped here and get built in order.</p>
+<p>Order matters: Part I is a single machine, Part II is what breaks when data spans machines, Part III is how to compose systems out of the pieces.</p>
+
+<div class="module"><div class="part">Part 0 · Orientation</div><h3>Module 0 · The distributed mindset</h3>
+<ol start="1">
+<li data-lesson-id="0001"><a href="lessons/0001-the-timeout-problem.html">The timeout problem</a> <span class="status-built">built</span> <span class="why">&mdash; make retries safe with idempotency keys</span></li>
+<li class="status-planned">Partial failure and the "what if this dies right here?" drill <span class="why">&mdash; a review technique you can apply to any design doc</span></li>
+<li class="status-planned">System models: crash-stop, crash-recovery, partial synchrony <span class="why">&mdash; state your assumptions before claiming correctness</span></li>
+<li class="status-planned">Safety vs liveness <span class="why">&mdash; know which property you are actually arguing about</span></li>
+</ol></div>
+
+<div class="module"><div class="part">Part I · Foundations on one machine</div><h3>Module 1 · Measuring systems: reliability, scalability, maintainability</h3>
+<ol start="5">
+<li class="status-planned">Faults vs failures; designing for fault tolerance</li>
+<li class="status-planned">Percentiles, tail latency and why averages lie <span class="why">&mdash; build a latency dashboard that tells the truth</span></li>
+<li class="status-planned">Describing load: fan-out on write vs on read (the timeline problem)</li>
+<li class="status-planned">Queueing, utilization and why systems fall off a cliff at 80% load</li>
+<li class="status-planned">SLIs, SLOs and error budgets <span class="why">&mdash; turn "reliable" into a number you can manage</span></li>
+<li class="status-planned">Operability and evolvability: the costs after launch</li>
+</ol></div>
+
+<div class="module"><div class="part">Part I</div><h3>Module 2 · Data models and query languages</h3>
+<ol start="11">
+<li class="status-planned">Relational vs document: locality, joins and the impedance mismatch</li>
+<li class="status-planned">Many-to-many and why documents drift toward relations</li>
+<li class="status-planned">Schema-on-read vs schema-on-write <span class="why">&mdash; choose consciously, not by default</span></li>
+<li class="status-planned">Graph models: property graphs and triple stores</li>
+<li class="status-planned">Declarative vs imperative queries (and why optimizers can only help one of them)</li>
+<li class="status-planned">Lab: model one real workload three ways and compare</li>
+</ol></div>
+
+<div class="module"><div class="part">Part I</div><h3>Module 3 · Storage engines and indexes</h3>
+<ol start="17">
+<li class="status-planned">The world's simplest database: an append-only log and a hash index</li>
+<li class="status-planned">Memtables, SSTables and the LSM-tree</li>
+<li class="status-planned">Compaction strategies; read, write and space amplification <span class="why">&mdash; predict where an LSM store will hurt</span></li>
+<li class="status-planned">B-trees, pages and the write-ahead log</li>
+<li class="status-planned">B-tree vs LSM: a decision framework, not a religion</li>
+<li class="status-planned">Secondary, covering and composite indexes; reading an EXPLAIN plan</li>
+<li class="status-planned">In-memory databases and what durability then means</li>
+<li class="status-planned">OLTP vs OLAP; warehouses and why they're separate</li>
+<li class="status-planned">Column storage, compression, vectorized execution</li>
+<li class="status-planned">Materialized views and data cubes</li>
+</ol></div>
+
+<div class="module"><div class="part">Part I</div><h3>Module 4 · Encoding and evolution</h3>
+<ol start="27">
+<li class="status-planned">Why JSON, XML and CSV are harder than they look (numbers, binary, schemas)</li>
+<li class="status-planned">Schema-based binary formats: field tags vs writer/reader schema resolution</li>
+<li class="status-planned">Forward and backward compatibility and rolling upgrades <span class="why">&mdash; deploy without a flag day</span></li>
+<li class="status-planned">Dataflow through databases, services (REST/RPC) and message brokers</li>
+<li class="status-planned">Lab: evolve a schema through three versions with old and new readers</li>
+</ol></div>
+
+<div class="module"><div class="part">Part II · Distributed data</div><h3>Module 5 · Replication</h3>
+<ol start="32">
+<li class="status-planned">Single-leader replication; synchronous, asynchronous, semi-synchronous</li>
+<li class="status-planned">Failover and its hazards: split brain, lost writes, bad timeouts</li>
+<li class="status-planned">What actually travels in the replication log</li>
+<li class="status-planned">Replication lag anomalies: read-your-writes, monotonic reads, consistent prefix <span class="why">&mdash; find them in your product</span></li>
+<li class="status-planned">Multi-leader: when it earns its complexity; conflict handling</li>
+<li class="status-planned">Leaderless replication: quorums, read repair, hinted handoff, sloppy quorums</li>
+<li class="status-planned">Concurrency without a clock: version vectors and siblings</li>
+<li class="status-planned">CRDTs and the idea of merge-by-construction</li>
+<li class="status-planned">Lab: break a quorum on purpose</li>
+</ol></div>
+
+<div class="module"><div class="part">Part II</div><h3>Module 6 · Partitioning</h3>
+<ol start="41">
+<li class="status-planned">Key-range vs hash partitioning</li>
+<li class="status-planned">Skew and hot keys; mitigation patterns</li>
+<li class="status-planned">Secondary indexes: local vs global (document- vs term-partitioned)</li>
+<li class="status-planned">Rebalancing strategies and consistent hashing</li>
+<li class="status-planned">Request routing and service discovery</li>
+</ol></div>
+
+<div class="module"><div class="part">Part II</div><h3>Module 7 · Transactions</h3>
+<ol start="46">
+<li class="status-planned">ACID without the marketing</li>
+<li class="status-planned">Dirty reads, dirty writes and read committed</li>
+<li class="status-planned">Snapshot isolation and MVCC internals</li>
+<li class="status-planned">Lost updates and the five ways to prevent them</li>
+<li class="status-planned">Write skew and phantoms <span class="why">&mdash; the bug class that survives code review</span></li>
+<li class="status-planned">Two-phase locking and its costs</li>
+<li class="status-planned">Serializable snapshot isolation; actual serial execution</li>
+<li class="status-planned">Lab: run isolation-level tests against a real database (Hermitage-style)</li>
+<li class="status-planned">Choosing an isolation level for a real feature</li>
+</ol></div>
+
+<div class="module"><div class="part">Part II</div><h3>Module 8 · The trouble with distributed systems</h3>
+<ol start="55">
+<li class="status-planned">Unreliable networks and network partitions in practice</li>
+<li class="status-planned">Time-of-day vs monotonic clocks; why timestamps lie</li>
+<li class="status-planned">Process pauses (GC, VM stalls) and how they break leases</li>
+<li class="status-planned">Leases, fencing tokens and distributed locks done right</li>
+<li class="status-planned">Truth by majority; Byzantine faults in one lesson</li>
+</ol></div>
+
+<div class="module"><div class="part">Part II</div><h3>Module 9 · Consistency and consensus</h3>
+<ol start="60">
+<li class="status-planned">Linearizability: what it is and what it costs</li>
+<li class="status-planned">The CAP theorem, stated honestly <span class="why">&mdash; why "CP or AP" is the wrong question</span></li>
+<li class="status-planned">Ordering, causality and Lamport timestamps</li>
+<li class="status-planned">Total order broadcast and why it is consensus in disguise</li>
+<li class="status-planned">Distributed transactions: two-phase commit and its blocking problem</li>
+<li class="status-planned">Raft, step by step (election, replication, safety)</li>
+<li class="status-planned">Coordination services in practice (etcd, ZooKeeper-style)</li>
+<li class="status-planned">Reading the Jepsen consistency map <span class="why">&mdash; evaluate a database's claims</span></li>
+</ol></div>
+
+<div class="module"><div class="part">Part III · Derived data</div><h3>Module 10 · Batch processing</h3>
+<ol start="68">
+<li class="status-planned">Unix pipelines as the design ancestor</li>
+<li class="status-planned">MapReduce and distributed filesystems</li>
+<li class="status-planned">Joins in batch: sort-merge, broadcast, partitioned hash</li>
+<li class="status-planned">Dataflow engines and fault tolerance by recomputation</li>
+</ol></div>
+
+<div class="module"><div class="part">Part III</div><h3>Module 11 · Stream processing</h3>
+<ol start="72">
+<li class="status-planned">Logs as the unifying abstraction; brokers and consumer offsets</li>
+<li class="status-planned">Change data capture and the outbox pattern <span class="why">&mdash; keep two stores in sync without dual writes</span></li>
+<li class="status-planned">Event sourcing and CQRS: benefits and sharp edges</li>
+<li class="status-planned">Windows, event time vs processing time, late data</li>
+<li class="status-planned">Stream joins and state</li>
+<li class="status-planned">Fault tolerance and exactly-once effect in streams</li>
+</ol></div>
+
+<div class="module"><div class="part">Part III</div><h3>Module 12 · Correctness and where this is going</h3>
+<ol start="78">
+<li class="status-planned">The end-to-end argument for data systems</li>
+<li class="status-planned">Unbundling the database; derived state as a dataflow</li>
+<li class="status-planned">Auditing, integrity checks and trust but verify</li>
+<li class="status-planned">Data, privacy and responsibility</li>
+</ol></div>
+
+<div class="module"><div class="part">Capstones</div><h3>Design reviews with real systems</h3>
+<ol start="82">
+<li class="status-planned">Review a payments ledger design (idempotency, transactions, reconciliation)</li>
+<li class="status-planned">Review a social timeline (fan-out, caching, partitioning, lag anomalies)</li>
+<li class="status-planned">Review your own system at work, with the course's checklists</li>
+</ol></div>
+
+<footer class="foot">Built from public sources: original papers, university lecture notes, engineering blogs and database documentation. See the repository's RESOURCES.md for the source list and verification status.</footer>
+</main></body></html>

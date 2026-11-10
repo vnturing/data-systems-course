@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Systems Field Course</title>
+<meta name="description" content="A deep, hands-on course on how data systems really work: storage, replication, transactions, consensus, and streams.">
+<link rel="stylesheet" href="assets/course.css"><script src="assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="index.html">Data Systems Field Course</a><a href="syllabus.html">Syllabus</a><a href="reference/delivery-semantics.html">Reference sheets</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">A field course for backend engineers</p>
+<h1>How data systems actually work, and fail</h1>
+<p class="lede">You already build backends. This course teaches what happens when your data outgrows one machine: the mechanisms underneath replication, transactions and consensus, the failure modes that bite in production, and how to design around them.</p>
+
+<h2>How it works</h2>
+<p><b>Depth over coverage of buzzwords.</b> Each lesson goes into a mechanism, runs it in an interactive simulator, and ties it to something you can check in your own systems this week. Claims are traced to primary sources (papers, lecture notes, vendor documentation, test reports) and cited in the lesson.</p>
+<p><b>Retrieval over rereading.</b> Every lesson ends with questions that test your ability to <i>apply</i> the idea. Progress is saved in your browser only; nothing leaves your machine.</p>
+
+<h2>Start here</h2>
+<p><span data-lesson-id="0001"></span><a href="lessons/0001-the-timeout-problem.html"><b>Lesson 1 · The timeout problem</b></a><br>
+<span style="color:var(--muted)">Why a missing reply is not a failure, and how idempotency keys make retries safe. Two simulators, a quiz, and a reference sheet.</span></p>
+<p>See the <a href="syllabus.html">full syllabus</a> for the 13 modules still to come.</p>
+
+<h2>Who it's for</h2>
+<p>Developers comfortable with SQL, services and production systems who are new to the distributed-systems side. If you've ever been surprised by a duplicate message, a stale read, or a failover that lost writes, this is for you.</p>
+
+<footer class="foot">Original course material. Concepts come from public sources cited in each lesson. Source code and content are meant to be forked and deployed on GitHub Pages.</footer>
+</main></body></html>

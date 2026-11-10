@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Reference: timeouts, retries, idempotency · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Reference sheet · from Lesson 0001</p>
+<h1>Timeouts, retries, idempotency</h1>
+<p class="lede">A one-page lookup for design reviews and code review. Print-friendly.</p>
+
+<h2>What a timeout means</h2>
+<p>Only: <i>no reply arrived in time</i>. Consistent worlds: request lost, server crashed before commit, server committed and reply lost, server committed and reply slow (GC, queueing, congestion). The client cannot tell them apart.</p>
+
+<h2>Postures</h2>
+<table>
+<tr><th>Posture</th><th>On timeout</th><th>Risk</th><th>Use when</th></tr>
+<tr><td>At-most-once</td><td>Don't retry</td><td>Lost or silently-done work</td><td>Duplicates are worse than misses (rare); or operation is cheap to re-trigger by a human</td></tr>
+<tr><td>At-least-once</td><td>Retry until answered</td><td>Duplicated effects</td><td>Operation is naturally idempotent (set value, delete by id, upsert by natural key)</td></tr>
+<tr><td>Exactly-once effect</td><td>Retry + dedupe</td><td>Dedupe state failure modes</td><td>Money, orders, inventory, anything user-visible and non-idempotent</td></tr>
+</table>
+
+<h2>Naturally idempotent vs not</h2>
+<table>
+<tr><th>Idempotent</th><th>Not idempotent</th></tr>
+<tr><td><code>SET balance = 100</code><br><code>PUT /users/42 {full document}</code><br><code>DELETE /orders/7</code><br>Upsert by natural key</td>
+<td><code>balance = balance - 10</code><br><code>POST /orders</code> (server picks id)<br>Append to list<br>Send email / SMS<br>Increment counter</td></tr>
+</table>
+<p>Trick: turn a non-idempotent op into an idempotent one by letting the <b>client choose the identity</b> (order id, key) before the first attempt.</p>
+
+<h2>Idempotency key checklist (server side)</h2>
+<ol>
+<li>Key is per <b>logical operation</b>, generated and persisted client-side <i>before</i> attempt 1; reused on all retries.</li>
+<li>Dedupe record and the effect commit in <b>one atomic transaction</b>. Never "record key, then do work".</li>
+<li>Store the <b>response</b>, not just the key, so a retry gets the same answer.</li>
+<li><b>Compare request parameters</b> with the stored request; reject mismatches (caller bug).</li>
+<li>Handle <b>concurrent duplicates</b>: in-flight marker, wait, or reject with a retryable status.</li>
+<li>Retention window &gt; longest client retry window. Document it.</li>
+<li>Key store must be as durable as the data it protects (an in-memory-only table is forgotten on crash).</li>
+<li>Decide what to do with <b>errors</b>: cache them (Stripe caches even 500s) or allow re-execution. Be explicit.</li>
+</ol>
+
+<h2>Anti-patterns</h2>
+<table>
+<tr><th>Anti-pattern</th><th>Why it fails</th></tr>
+<tr><td>New key per attempt</td><td>Identical to a blind retry; no dedupe possible</td></tr>
+<tr><td>Key = hash of payload</td><td>Two legitimate identical purchases get merged</td></tr>
+<tr><td>Key recorded before effect, separate step</td><td>Crash between them = false success, silent loss</td></tr>
+<tr><td>In-memory dedupe table</td><td>Lost on restart; duplicates accepted after crash</td></tr>
+<tr><td>Library auto-retry on POST with no key</td><td>Hidden at-least-once on a non-idempotent call</td></tr>
+<tr><td>Retry with no backoff or jitter</td><td>A slow server gets more load exactly when it is struggling (retry storms)</td></tr>
+</table>
+
+<h2>The honest limit</h2>
+<p>If the effect lives outside your transaction boundary (card network, email, physical device), key + effect cannot be atomic. Pass the downstream idempotency key through, or reconcile by querying actual state afterward.</p>
+
+<h2>Sources</h2>
+<ol class="sources">
+<li>Princeton COS 418, lecture 4 &ldquo;RPCs and failures&rdquo;: <a href="https://www.cs.princeton.edu/courses/archive/fall25/cos418/docs/L4-rpc-failure.pdf">PDF</a></li>
+<li>Stripe API docs, &ldquo;Idempotent requests&rdquo;: <a href="https://docs.stripe.com/api/idempotent_requests">docs.stripe.com</a></li>
+</ol>
+<p class="sidenote" style="display:none"></p>
+<div class="pager"><a href="../lessons/0001-the-timeout-problem.html">&larr; Back to the lesson</a><a href="../index.html">Course home</a></div>
+</main></body></html>
