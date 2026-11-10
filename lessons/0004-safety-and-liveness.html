@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Safety and liveness: what "correct" means · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-0-checklist.html">Module 0 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 0 · Lesson 4</p>
+<h1>Safety and liveness: what &ldquo;correct&rdquo; means</h1>
+<p class="lede">&ldquo;Never lose data&rdquo; and &ldquo;stay available&rdquo; are different kinds of promise. Kafka&rsquo;s durability settings are the clearest place to see the difference.</p>
+<div class="meta"><span>~45 min</span><span>2 interactives</span><span>4-question check</span><span>Builds on Lesson 3</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+State any requirement as a safety or a liveness property, explain why the two behave differently under failure, and set <code>acks</code>, <code>min.insync.replicas</code> and <code>unclean.leader.election.enable</code> for a topic by choosing, on purpose, what you are willing to give up.</div>
+
+<h2>1. Two kinds of promise</h2>
+<p>Informally, going back to Lamport: a <b>safety</b> property says something bad never happens; a <b>liveness</b> property says something good eventually happens.<sup class="c"><a href="#s2">[2]</a></sup> The formal version, from Alpern and Schneider&rsquo;s 1985 paper &ldquo;Defining Liveness&rdquo;, makes the difference testable.<sup class="c"><a href="#s1">[1]</a><a href="#s2">[2]</a></sup></p>
+<div class="callout"><b class="t">The finite-prefix test</b>
+<b>Safety:</b> if an execution violates the property, you can point to a finite prefix of it, a moment in the log, where the damage is already done and no continuation can repair it.<br>
+<b>Liveness:</b> no finite prefix ever refutes it. However badly things look so far, some continuation could still satisfy it ("while there's life there's hope").<sup class="c"><a href="#s1">[1]</a></sup></div>
+<p>Practical version: <i>can I put my finger on the moment it went wrong?</i> If yes, you were looking at a safety violation. If the honest answer is only &ldquo;it hasn&rsquo;t happened yet&rdquo;, it is liveness. A classic result (the decomposition theorem) says any property can be written as a combination of a safety property and a liveness property, which is why specifications are usually stated as one of each.<sup class="c"><a href="#s1">[1]</a><a href="#s2">[2]</a></sup></p>
+<table>
+<tr><th>Requirement</th><th>Kind</th><th>Why</th></tr>
+<tr><td>No acknowledged Kafka record is ever lost</td><td><span class="tag bad">safety</span></td><td>The loss is a specific moment: an acked id absent from the surviving log</td></tr>
+<tr><td>A customer is never charged twice for one order</td><td><span class="tag bad">safety</span></td><td>The second charge is the observable moment</td></tr>
+<tr><td>Two nodes are never both primary for the same shard</td><td><span class="tag bad">safety</span></td><td>Two simultaneous primaries is a snapshot you can photograph</td></tr>
+<tr><td>Every produce request eventually succeeds</td><td><span class="tag ok">liveness</span></td><td>A stall of any finite length is not yet a violation</td></tr>
+<tr><td>A failed primary is eventually replaced</td><td><span class="tag ok">liveness</span></td><td>&ldquo;Eventually&rdquo; has no deadline, so no finite prefix refutes it</td></tr>
+<tr><td>Every payment eventually settles</td><td><span class="tag ok">liveness</span></td><td>Same shape: good thing, no deadline</td></tr>
+</table>
+<p>A caveat that surprises people: add a deadline (&ldquo;replaced within 30 seconds&rdquo;) and the requirement becomes a safety property in this formal sense, because missing the deadline is a moment you can point at. That is why SLOs behave like safety properties you can alert on, while &ldquo;eventually&rdquo; promises are the ones you cannot. (This bounded-liveness observation is standard in the specification literature but is not drawn from the sources below; treat it as my framing.)</p>
+
+<h2>2. Why the split drives design</h2>
+<p>Lesson 3 left you in a partially synchronous world where messages can be lost, nodes can pause, and you cannot tell slow from dead. In that world <b>you can often keep safety unconditionally while liveness is conditional on the system behaving for long enough</b>. This is my synthesis, not a quote, but it is the organizing idea behind most consensus protocols you will meet in Module 9: stalls and false suspicions (Lesson 3) may cost you progress; they must never cost you correctness. When someone proposes a design in which a pause or a spurious failover can corrupt data, they have let a liveness problem leak into safety.</p>
+
+<h2>3. Kafka as the working example</h2>
+<p>A Kafka partition has one leader and some followers. The <b>in-sync replicas</b> (ISR) are the set of replicas currently caught up with the leader. Three settings decide what &ldquo;acknowledged&rdquo; means and what happens when replicas fail:</p>
+<table>
+<tr><th>Setting</th><th>What it controls</th><th>Moves you toward</th></tr>
+<tr><td><code>acks</code> (producer)</td><td><code>acks=all</code>: the producer sees success only after the record is replicated to all in-sync replicas.<sup class="c"><a href="#s3">[3]</a></sup> <code>acks=1</code> or <code>0</code>: the producer continues even if replicas are unavailable.<sup class="c"><a href="#s3">[3]</a></sup></td><td>safety (all) / liveness (1, 0)</td></tr>
+<tr><td><code>min.insync.replicas</code></td><td>With <code>acks=all</code>, the minimum number of replicas that must acknowledge. If it cannot be met the producer gets an exception (<code>NotEnoughReplicas</code> or <code>NotEnoughReplicasAfterAppend</code>). A typical setup is replication factor 3, min ISR 2, <code>acks=all</code>.<sup class="c"><a href="#s4">[4]</a></sup></td><td>safety, at the cost of rejecting writes</td></tr>
+<tr><td><code>unclean.leader.election.enable</code></td><td>If true, an out-of-sync replica can become leader when no in-sync replica is alive: availability is preserved but data may be lost. If false and no live in-sync replica exists, the partition is unavailable.<sup class="c"><a href="#s5">[5]</a></sup></td><td>liveness (true) / safety (false)</td></tr>
+</table>
+<div class="callout warn"><b class="t">Check your defaults</b>
+Older documentation states that unclean election defaults to <i>true</i> (a Cloudera page for an older Kafka does exactly that).<sup class="c"><a href="#s5">[5]</a></sup> Current references list the default as <i>false</i>.<sup class="c"><a href="#s6">[6]</a></sup> Do not trust either from memory: read the <b>effective</b> value on your own cluster and topic, since managed services and old clusters may differ.</div>
+
+<h2>4. Break a partition on purpose</h2>
+<p>This is a deliberately <b>simplified</b> model (it notices failures instantly, ignores batching and leader epochs). It is built to expose the trade-off, not to certify Kafka behavior. Try these experiments in order:</p>
+<ol>
+<li>Set <code>acks=1</code> and click <i>Run preset: Leader dies right after an acks=1 write</i>. Note which acknowledged message is lost, and that broker A still has it on disk. It is lost the moment a new leader without it accepts writes.</li>
+<li>Switch to <code>acks=all</code>, min ISR 2 and run the same preset. Nothing is lost. What did you pay? Look for the first rejected produce in the next experiment.</li>
+<li>Run the cascading-failure preset with <code>unclean = false</code>. Watch the partition go <b>offline</b> and stay offline until the right broker returns. Then flip <code>unclean = true</code> and run it again: the partition comes back sooner, and a message you were told was safe is gone.</li>
+<li>Bonus: with <code>acks=all</code> and min ISR 1, produce, kill C, produce, kill B, produce (accepted by the leader alone), then <i>Destroy A disk</i>. Look at the &ldquo;on no disk anywhere&rdquo; tag. Repeat with min ISR 2.</li>
+</ol>
+
+<div class="widget" id="sim-kafka"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>Eight configurations, three disasters</h3>
+<div class="widget" id="sim-kafka-matrix"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>Reading the matrix:</p>
+<ul>
+<li><b><code>min.insync.replicas</code> does nothing when <code>acks=1</code>.</b> The rows for <code>acks=1</code> are identical across min ISR. (This is by design: the setting applies when the producer sets <code>acks=all</code>.<sup class="c"><a href="#s4">[4]</a></sup>)</li>
+<li><b><code>acks=all</code> alone is not durability.</b> With min ISR 1, once the ISR has shrunk to the leader, <code>acks=all</code> acknowledges from the leader alone. It behaves like <code>acks=1</code> in the cascade.</li>
+<li><b>Unclean election is the lever for loss in the cascade.</b> Every <code>unclean=true</code> row loses acknowledged messages, even <code>acks=all</code> with min ISR 2.</li>
+<li><b>Min ISR 2 is what survives a lost disk.</b> In the third scenario <code>acks=all</code> with min ISR 1 still destroys an acknowledged record, because once the ISR shrank to the leader, &ldquo;all in-sync replicas&rdquo; meant one copy. With min ISR 2 that write is rejected instead of acknowledged, so nothing acknowledged lives on a single disk.</li>
+<li><b>The safe row costs liveness.</b> Only <code>acks=all</code>, min ISR 2, <code>unclean=false</code> loses nothing in <i>all three</i> scenarios, and it rejects the most produce requests (3 of 5 in the cascade). That is the trade, quantified: safety is unconditional, so the price is paid in availability.</li>
+</ul>
+
+<h2>5. The producer side is half the story</h2>
+<p>The documentation lists two exceptions for an unmet minimum: <code>NotEnoughReplicas</code> and <code>NotEnoughReplicasAfterAppend</code>.<sup class="c"><a href="#s4">[4]</a></sup> As its name suggests, the second can be reported after the leader has already appended the record (confirm the exact semantics in the Kafka docs for your version). If so, the producer is told the write failed while it may in fact exist, and a producer that retries then risks writing the record twice. That is Lesson 1 again, and the reason producers should enable idempotence: since Kafka 0.11.0.0 the idempotent producer prevents duplicates caused by the producer&rsquo;s own retries.<sup class="c"><a href="#s7">[7]</a></sup> A safe pipeline needs both: broker settings that protect acknowledged data, and a producer that does not double-write when it retries.</p>
+
+<h2>6. Deciding per topic (my judgment)</h2>
+<table>
+<tr><th>Topic carries</th><th>Lean toward</th><th>Typical settings</th></tr>
+<tr><td>Billing, ledger, order events</td><td>Safety. A short unavailability is cheaper than a lost record.</td><td><code>acks=all</code>, replication factor 3, min ISR 2, unclean off, idempotent producer</td></tr>
+<tr><td>Metrics, logs, clickstream where loss is tolerable</td><td>Liveness. Prefer to keep accepting writes.</td><td>Possibly <code>acks=1</code> and, deliberately, unclean on. One source notes enabling it for use cases like metrics and log collection, and calls it dangerous without understanding the consequences.<sup class="c"><a href="#s6">[6]</a></sup></td></tr>
+</table>
+<p>Whichever you choose, write the choice down as a pair: <i>&ldquo;This topic never loses an acknowledged record (safety); it may reject produces for up to the time it takes to restore two in-sync replicas (liveness we sacrificed).&rdquo;</i> A requirement you cannot phrase as a safety-versus-liveness pair is usually a requirement you have not finished thinking about.</p>
+
+<h2>7. Check yourself</h2>
+<div class="quiz" data-lesson-id="0004"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"'No acknowledged write is ever lost' is which kind of property?",
+ "options":["Safety, because a violation is observable","Liveness, because it concerns eventual outcomes","Neither, because properties require continuous execution","Both, because every property is symmetrical"],
+ "answer":0,"why":"A lost acknowledged write is a specific moment you can point to: an acked record missing from the surviving log. That is the finite-prefix signature of a safety property."},
+{"q":"With acks=all and min.insync.replicas=2 on RF=3, two brokers fail. What happens to produce requests?",
+ "options":["They succeed using the single remaining leader replica","They hang forever while Kafka silently discards them","They are rejected, protecting safety at liveness's expense","They succeed, though consumers cannot read them yet"],
+ "answer":2,"why":"The ISR is down to one, below the minimum of two, so the leader rejects produces with an exception instead of accepting a write it cannot protect."},
+{"q":"What is the main risk of enabling unclean leader election?",
+ "options":["Producers lose idempotence guarantees on every retry","Consumers must reread the entire topic always","Partitions can no longer elect any leader","Acknowledged records the new leader lacks vanish"],
+ "answer":3,"why":"An out-of-sync replica can become leader, and records it never received, even ones acknowledged earlier, are lost. You gain availability by spending safety."},
+{"q":"A topic carries billing events that must never be lost. Which configuration fits best?",
+ "options":["Acknowledge from the leader only and enable unclean election","Wait for replicas, require two in sync, forbid unclean","Use a single replica with the fastest possible acknowledgments","Disable acknowledgments entirely and rely on consumer retries instead"],
+ "answer":1,"why":"This is the safety-first combination: wait for in-sync replicas, require a minimum of two, and never elect an out-of-sync leader. The price is rejected produces during multi-broker failures."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: look at one real topic (10 minutes)</b></summary>
+<p>Find the effective <code>min.insync.replicas</code>, <code>unclean.leader.election.enable</code> and replication factor for one topic you care about, and the producer&rsquo;s <code>acks</code> and idempotence setting. Write the safety/liveness pair those settings actually implement. If it differs from what the team believes, that difference is worth knowing.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Will Schultz, &ldquo;Defining Safety and Liveness&rdquo; (educator write-up of Alpern and Schneider, 1985, <i>Defining Liveness</i>, Information Processing Letters 21(4), doi 10.1016/0020-0190(85)90056-0). Finite-prefix characterization; decomposition theorem. <a href="https://will62794.github.io/formal-methods/2020/08/01/safety-and-liveness.html">will62794.github.io</a></li>
+<li id="s2">Stavros Tripakis (Northeastern), &ldquo;Safety and Liveness&rdquo; (lecture slides), and Wikipedia, &ldquo;Safety and liveness properties&rdquo; (<i>secondary</i>; informal definitions and history). <a href="https://khoury.northeastern.edu/~stavros/10-safety-liveness.pdf">slides PDF</a> &middot; <a href="https://en.wikipedia.org/wiki/Safety_and_liveness_properties">Wikipedia</a></li>
+<li id="s3">Manning liveBook, <i>Kafka for Architects</i> concept pages (<i>secondary</i>): durability vs availability table for <code>acks</code>, ISR, unclean election. <a href="https://livebook.manning.com/learn/concepts/durability--domain-concept/kafka-for-architects">livebook.manning.com</a></li>
+<li id="s4">Conduktor Kafka options explorer, <code>min.insync.replicas</code> (<i>reference page quoting Kafka&rsquo;s config documentation</i>). <a href="https://kafka-options-explorer.conduktor.io/config/min-insync-replicas/">conduktor.io</a></li>
+<li id="s5">Cloudera HDP 3.1.4, &ldquo;Installing and configuring Apache Kafka: general broker settings&rdquo; (older Kafka; documents unclean election semantics and an older default). <a href="https://docs.cloudera.com/HDPDocuments/HDP3/HDP-3.1.4/installing-configuring-kafka/content/general_broker_settings.html">docs.cloudera.com</a></li>
+<li id="s6">AxonOps, &ldquo;Kafka Broker Configuration&rdquo; and Conduktor, &ldquo;Unclean leader election&rdquo; (<i>secondary</i>; list default false). <a href="https://axonops.com/docs/data-platforms/kafka/operations/configuration/broker/">axonops.com</a> &middot; <a href="https://docs.conduktor.io/learn/advanced/topics/unclean-leader-election">docs.conduktor.io</a>. <i>Verify against the official Apache Kafka docs for your version.</i></li>
+<li id="s7">Confluent documentation, &ldquo;Kafka Message Delivery Guarantees&rdquo;. Idempotent producer since 0.11.0.0. <a href="https://docs.confluent.io/kafka/design/delivery-semantics.html">docs.confluent.io</a></li>
+</ol>
+
+<div class="pager"><a href="0003-system-models.html">&larr; Lesson 3: System models</a><a href="0005-retries-backoff-and-jitter.html">Lesson 5: Retries done right &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-kafka.js"></script>
+</body></html>

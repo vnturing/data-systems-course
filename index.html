@@ -13,12 +13,21 @@
 
 <h2>How it works</h2>
 <p><b>Depth over coverage of buzzwords.</b> Each lesson goes into a mechanism, runs it in an interactive simulator, and ties it to something you can check in your own systems this week. Claims are traced to primary sources (papers, lecture notes, vendor documentation, test reports) and cited in the lesson.</p>
+<p><b>Examples use MySQL, Kafka and AWS,</b> because the best way to learn a mechanism is to see it in the tools you run.</p>
 <p><b>Retrieval over rereading.</b> Every lesson ends with questions that test your ability to <i>apply</i> the idea. Progress is saved in your browser only; nothing leaves your machine.</p>
 
-<h2>Start here</h2>
-<p><span data-lesson-id="0001"></span><a href="lessons/0001-the-timeout-problem.html"><b>Lesson 1 · The timeout problem</b></a><br>
-<span style="color:var(--muted)">Why a missing reply is not a failure, and how idempotency keys make retries safe. Two simulators, a quiz, and a reference sheet.</span></p>
-<p>See the <a href="syllabus.html">full syllabus</a> for the 13 modules still to come.</p>
+<h2>Module 0 · The distributed mindset (5 lessons)</h2>
+<p><span data-lesson-id="0001"></span><a href="lessons/0001-the-timeout-problem.html"><b>1 &middot; The timeout problem</b></a><br>
+<span style="color:var(--muted)">Why a missing reply is not a failure, and how idempotency keys make retries safe.</span></p>
+<p><span data-lesson-id="0002"></span><a href="lessons/0002-what-if-it-dies-right-here.html"><b>2 &middot; What if it dies right here?</b></a><br>
+<span style="color:var(--muted)">The crash-point drill for handlers that write MySQL and publish to Kafka; the outbox pattern.</span></p>
+<p><span data-lesson-id="0003"></span><a href="lessons/0003-system-models.html"><b>3 &middot; System models: say your assumptions out loud</b></a><br>
+<span style="color:var(--muted)">Nodes, network, timing; why failure detection is a trade-off. Failure-detector lab.</span></p>
+<p><span data-lesson-id="0004"></span><a href="lessons/0004-safety-and-liveness.html"><b>4 &middot; Safety and liveness: what &ldquo;correct&rdquo; means</b></a><br>
+<span style="color:var(--muted)">Kafka acks, min.insync.replicas and unclean election as a deliberate trade. Partition lab.</span></p>
+<p><span data-lesson-id="0005"></span><a href="lessons/0005-retries-backoff-and-jitter.html"><b>5 &middot; Retries done right</b></a><br>
+<span style="color:var(--muted)">Timeouts from percentiles, backoff, jitter and retry budgets on AWS. Two labs.</span></p>
+<p>Then the <a href="reference/module-0-checklist.html">Module 0 design-review checklist</a>, and the <a href="syllabus.html">full syllabus</a> for the 12 modules still to come.</p>
 
 <h2>Who it's for</h2>
 <p>Developers comfortable with SQL, services and production systems who are new to the distributed-systems side. If you've ever been surprised by a duplicate message, a stale read, or a failover that lost writes, this is for you.</p>

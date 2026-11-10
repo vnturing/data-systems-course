@@ -10,7 +10,7 @@
 <p class="kicker">Module 0 · Lesson 1</p>
 <h1>The timeout problem</h1>
 <p class="lede">The first thing that separates a distributed system from a single machine: sometimes you ask a question and the answer is silence.</p>
-<div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span><span>Reference sheet included</span></div>
+<div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span><span>Reference sheet included</span><span>Optional work task</span></div>
 
 <div class="callout win"><b class="t">What you can do after this lesson</b>
 Look at any "call another service and retry on failure" code path and say, with a precise argument, whether a retry can duplicate or lose work, and which fix applies.</div>
@@ -75,14 +75,14 @@ If your effect is outside your transaction boundary (an email sent, a card netwo
 ]</script>
 <script src="../assets/quiz.js"></script>
 
-<h2>7. Do this at work this week</h2>
+<details class="callout"><summary><b>Optional: apply it to your own code (about 20 minutes)</b></summary>
 <ol>
 <li>Grep your codebase for HTTP client retry configuration (library-level auto-retry counts). List every <b>POST</b> endpoint that is retried.</li>
 <li>For each, answer: if the first attempt succeeded and its reply was lost, what happens on the retry? Write the answer down; don't answer from memory of how you <i>meant</i> it to work.</li>
 <li>Pick the worst one. Check whether the downstream API accepts an idempotency key. If yes, generate the key once per <i>logical</i> operation (persisted before the first attempt) and reuse it on every retry.</li>
 <li>If you own the downstream service, check that its dedupe record and its effect commit in one transaction.</li>
 </ol>
-<p>Bring what you find to the next lesson. Real findings make every later module concrete.</p>
+<p>Nothing later in the course depends on you doing this. It simply turns the lesson into a habit.</p></details>
 
 <h2>Sources used in this lesson</h2>
 <ol class="sources">
@@ -91,7 +91,7 @@ If your effect is outside your transaction boundary (an email sent, a card netwo
 <li id="s3">Martin Kleppmann, <i>Distributed Systems</i> lecture series (Cambridge, 8 lectures plus notes). For this lesson: 1.3 RPC and 5.1 Replication (retrying state updates, idempotence). Notes: <a href="https://www.cl.cam.ac.uk/teaching/2122/ConcDisSys/dist-sys-notes.pdf">dist-sys-notes.pdf</a>. Course overview: <a href="https://martin.kleppmann.com/2020/11/18/distributed-systems-and-elliptic-curves.html">announcement post</a>. <i>Further reading; the claims above are not taken from these.</i></li>
 </ol>
 
-<div class="pager"><a href="../index.html">&larr; Course home</a><a href="../syllabus.html">Next: see the full syllabus &rarr;</a></div>
+<div class="pager"><a href="../index.html">&larr; Course home</a><a href="0002-what-if-it-dies-right-here.html">Lesson 2: What if it dies right here? &rarr;</a></div>
 <footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
 </main>
 <script src="../assets/sim-timeout.js"></script>

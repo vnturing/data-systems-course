@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Retries done right · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-0-checklist.html">Module 0 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 0 · Lesson 5</p>
+<h1>Retries done right: timeouts, backoff, jitter, budgets</h1>
+<p class="lede">Lesson 1 said a retry is only safe if repeating the work is harmless. This lesson is about the other half: even a harmless retry can take down the service it is trying to reach.</p>
+<div class="meta"><span>~45 min</span><span>2 interactives</span><span>4-question check</span><span>Builds on Lessons 1 to 4</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Choose a timeout from a latency percentile instead of a guess, configure backoff with jitter and a cap on retries, explain why layered retries multiply, and decide which of your operations may be retried at all.</div>
+
+<h2>1. Retries are selfish</h2>
+<p>The Amazon Builders&rsquo; Library article on this topic opens from a simple premise: whenever one service calls another, failures happen, so systems need three tools: <b>timeouts, retries and backoff</b>.<sup class="c"><a href="#s1">[1]</a></sup> It then makes the observation that organizes this whole lesson: retries are &ldquo;selfish.&rdquo; When a client retries it spends more of the server&rsquo;s time to raise its own chance of success.<sup class="c"><a href="#s1">[1]</a></sup> That is fine when the server is healthy and failures are rare. When the server is struggling, every client doing the same thing makes the struggle worse, and unlike most load there is almost no way to coordinate clients to retry the right amount.<sup class="c"><a href="#s1">[1]</a></sup></p>
+
+<h2>2. Start with the timeout</h2>
+<p>Every retry begins with a timeout (Lesson 1: a timeout is a guess). The Library&rsquo;s recommended practice is to set a timeout on all remote calls, covering both connecting and waiting for the response.<sup class="c"><a href="#s1">[1]</a></sup> The hard part is the value. Too high, and the timeout stops helping, because resources stay tied up while the client waits. Too low, and you create extra backend traffic and latency from retries, and a small latency bump can turn into a full outage because every request starts retrying.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>Their method is to choose an <b>acceptable false-timeout rate</b> (for example 0.1%) and set the timeout to the matching percentile of the downstream service&rsquo;s latency (p99.9 in that example).<sup class="c"><a href="#s1">[1]</a></sup> Worked example: if the dependency&rsquo;s p99.9 latency is 800 ms, a timeout near 800 ms means about one in a thousand calls will be abandoned while actually still succeeding. That is the useful way to read &ldquo;false timeout&rdquo;: <i>it is the Lesson 1 world where the server did the work and you did not wait</i>. The rate you accept is the rate at which your retry logic runs on calls that already worked, which is exactly why Lessons 1 and 2 had to come first.</p>
+
+<h2>3. Backoff and jitter</h2>
+<p><b>Capped exponential backoff</b> multiplies the wait after each attempt by a constant, up to a maximum.<sup class="c"><a href="#s2">[2]</a></sup> It slows clients down, but it has a subtle flaw: clients that failed at the same moment also retry at the same moments. <b>Jitter</b> adds randomness to the wait so they spread out. In the &ldquo;full jitter&rdquo; variant the sleep is a random value between zero and the capped exponential delay (Brooker&rsquo;s preferred form, as one summary writes it: <code>random(0, base * 2^attempt)</code>, capped).<sup class="c"><a href="#s2">[2]</a><a href="#s3">[3]</a></sup></p>
+<p>Isolate the effect. The lab below throws 1,000 clients that all failed at the same instant at a server that can handle 100 attempts per tick.</p>
+
+<div class="widget" id="sim-herd"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>What to notice</h3>
+<ol>
+<li><b>With free failures (slider at 0%), immediate retry finishes first</b> but makes about 5.5 calls per client. Speed bought by burning server work.</li>
+<li><b>Unjittered backoff makes the same number of calls and finishes last.</b> The clients stay synchronized: peaks of 1,000 at every retry instant, with idle gaps in between.</li>
+<li><b>Full jitter cuts calls per client by almost half and finishes several times sooner than unjittered backoff.</b> This reproduces, in spirit, AWS&rsquo;s own experiment, where the unjittered approach was the clear loser on both work and time and jittered approaches substantially reduced client work and server load.<sup class="c"><a href="#s2">[2]</a></sup> (Their experiment was optimistic concurrency control with many contending clients, a different workload from this toy; the qualitative result is what carries over.)</li>
+<li><b>Now raise the slider.</b> At 10% or more, a rejected attempt costs the server enough that a 1,000-strong synchronized wave leaves it with nothing to spare for useful work. Immediate and unjittered retries never finish; jitter still does. The threshold depends on herd size relative to capacity: the bigger the herd, the lower the cost needed to cause this.</li>
+</ol>
+<p>The Library adds a point that is easy to miss: jitter is not only for retries. Periodic work such as timers and cron jobs benefits too, because it removes synchronized spikes.<sup class="c"><a href="#s1">[1]</a></sup> The AWS Architecture Blog&rsquo;s summary of the experiment is blunt: the return on the small complexity of jittered backoff is huge, and it should be standard for remote clients.<sup class="c"><a href="#s2">[2]</a></sup></p>
+
+<h2>4. Amplification, layers and budgets</h2>
+<p>Backoff and jitter shape <i>when</i> retries arrive. They do not limit <i>how many</i>. The second lab models a longer story: a service handling 100 requests per tick with capacity 150 goes fully down for a few ticks, then returns, with a steady stream of new requests the whole time.</p>
+
+<div class="widget" id="sim-retry"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>What to notice (and what not to conclude)</h3>
+<ol>
+<li><b>Immediate retries with a generous retry limit never recover.</b> Set max retries to 10 with the default outage and watch the stuck backlog. A modest number of requests that the server cannot serve right away becomes a standing overload.</li>
+<li><b>Jitter helps against immediate retry, but not enough on its own.</b> Lengthen the outage and raise max retries until the jittered row fails to recover too.</li>
+<li><b>A retry budget bounds amplification regardless of settings.</b> The last row caps retries with a token bucket: each retry spends a token and successes refill tokens slowly, so when the service is struggling, retries stop. Amplification stays near 1.0&times; and recovery is immediate, at the price of giving up on some requests.</li>
+<li><b>Do not conclude anything about backoff versus jitter from this lab.</b> This toy deliberately leaves unjittered backoff out of the table because the ordering of those two flips with parameters here. The herd lab and the AWS experiment are the right evidence for jitter. The lab&rsquo;s own assumption, a rejected attempt costing 20% of a real request, is made up to show the mechanism, not measured from anything.</li>
+</ol>
+<p>Token-bucket retry limiting is how, according to a secondary summary of the Library article, Amazon prefers to bound retries (over circuit breakers, which the summary says the author finds modal and hard to test), and that summary says AWS&rsquo;s SDKs have shipped a version of it since 2016.<sup class="c"><a href="#s4">[4]</a></sup> Treat that as a pointer to the primary article, not a settled fact.</p>
+
+<h3>Layers multiply</h3>
+<p>The Library lists layered systems among the other problems with retries.<sup class="c"><a href="#s1">[1]</a></sup> The arithmetic is simple and unforgiving (this calculation is mine): if a user-facing service, an API tier and a data service each make 3 attempts against the layer below, one failing user request can reach the bottom as up to <b>3 &times; 3 &times; 3 = 27</b> calls. One secondary summary of the Library article gives the guidance as: retry at one layer only and let the others fail fast.<sup class="c"><a href="#s4">[4]</a></sup> In an AWS-based service, count the retry loops that stack up before a request reaches a database: SDK, your own wrapper, the gateway, the client app. Defaults vary by SDK and version, so read the effective configuration rather than trusting memory.</p>
+
+<h2>5. Which calls may be retried at all</h2>
+<p>All of the above assumes the retried operation is safe to repeat. The Library names the issue directly: some remote calls have side effects.<sup class="c"><a href="#s1">[1]</a></sup> Lesson 1&rsquo;s answer is idempotency, and the services you use have their own versions, each with a <i>window</i> that your retry policy must fit inside:</p>
+<table>
+<tr><th>Mechanism</th><th>What it dedupes</th><th>Window to respect</th></tr>
+<tr><td>Stripe <code>Idempotency-Key</code></td><td>Repeated API requests</td><td>Keys can be pruned after at least 24 hours (Lesson 1)</td></tr>
+<tr><td>SQS FIFO <code>MessageDeduplicationId</code></td><td>Repeated sends to a queue</td><td>A 5-minute deduplication interval. A resend with the same id after the interval can create another message.<sup class="c"><a href="#s5">[5]</a><a href="#s6">[6]</a></sup> SQS tracks the id even after the message was received and deleted.<sup class="c"><a href="#s6">[6]</a></sup></td></tr>
+<tr><td>Kafka idempotent producer</td><td>Duplicates from the producer&rsquo;s own retries</td><td>Does not cover your database write (Lesson 2)</td></tr>
+<tr><td>SQS standard queue</td><td>Nothing: at-least-once delivery, best-effort ordering</td><td>Consumers must be idempotent<sup class="c"><a href="#s7">[7]</a></sup></td></tr>
+</table>
+<p>The rule that falls out: <b>the longest period over which anything can still retry must be shorter than the shortest dedupe window it relies on.</b> A retry that lands after the window is, as far as the service is concerned, a brand-new request.</p>
+<p>As for SDK behavior: most AWS SDKs support exponential backoff and jitter as part of their standard and adaptive retry modes.<sup class="c"><a href="#s2">[2]</a></sup> Before layering your own loop on top of that, find out what the SDK already does.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0005"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"Why can retries turn a small slowdown into an outage?",
+ "options":["Retried requests always take longer than the originals","Retries add server work exactly when capacity shrinks","Timeouts automatically double after each failed retry attempt","Servers refuse requests that were previously attempted once"],
+ "answer":1,"why":"Retries are selfish: each one spends server time to raise one client's odds. When everyone does it while capacity is already reduced, the extra load deepens the problem."},
+{"q":"Which retry schedule best spreads out a synchronized herd?",
+ "options":["Exponential backoff with randomized full jitter","Retry immediately after every single failure","Wait a fixed second between attempts","Exponential backoff with identical delays everywhere"],
+ "answer":0,"why":"Clients that failed together stay together under any deterministic schedule. Randomizing the wait is what desynchronizes them, which the herd lab shows directly."},
+{"q":"Three layers each make 3 attempts. How many calls can the bottom service see for one user request?",
+ "options":["Up to nine","Up to twelve","Up to twenty-seven","Up to six"],
+ "answer":2,"why":"Retries compound multiplicatively across layers: 3 x 3 x 3 = 27 in the worst case, which is why guidance is to retry at one layer only."},
+{"q":"Which retried operation needs an idempotency mechanism?",
+ "options":["Reading a customer's profile by stable id","Deleting an object by its exact key","Overwriting a record with a full document","Charging a card for a new order"],
+ "answer":3,"why":"Reads, deletes by key and full overwrites are naturally idempotent. Creating a charge or order is not: a repeat after a lost reply does it twice."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: inventory your retry layers (15 minutes)</b></summary>
+<p>For one request path in a system you run, list every place a failed call can be retried (client app, gateway, service SDK, your own wrapper, queue redelivery) and multiply the attempt counts. Then list which of those paths include a non-idempotent write. The product and that list together are your retry risk.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Marc Brooker, &ldquo;Timeouts, retries, and backoff with jitter&rdquo;, Amazon Builders&rsquo; Library (primary). Timeout selection by percentile, &ldquo;retries are selfish&rdquo;, backoff, jitter, side effects, layers. <a href="https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter">aws.amazon.com/builders-library</a></li>
+<li id="s2">Marc Brooker, &ldquo;Exponential Backoff And Jitter&rdquo;, AWS Architecture Blog (primary). Capped backoff, full/equal/decorrelated jitter, simulation of optimistic concurrency control, SDK support. <a href="https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/">aws.amazon.com/blogs/architecture</a></li>
+<li id="s3">Yan Cui, &ldquo;Amazon Builders&rsquo; Library in focus #1&rdquo; (<i>secondary summary</i>), for the full-jitter formula as stated by Brooker. <a href="https://medium.com/lumigo/amazon-builders-library-in-focus-1-timeouts-retries-and-backoff-with-jitter-f8e48587c79e">medium.com/lumigo</a></li>
+<li id="s4">NextPoint architecture review of the Library article (<i>secondary summary</i>): token-bucket retry limiting, circuit-breaker remarks, retry-at-one-layer guidance, SDK history. <a href="https://architecture.nextpoint.com/article-reviews/group-02-retry-backoff-jitter">architecture.nextpoint.com</a>. <i>Read the primary article before relying on these points.</i></li>
+<li id="s5">AWS SDK documentation for <code>SendMessageBatchRequestEntry</code> (<code>MessageDeduplicationId</code>): five-minute minimum deduplication interval; resends after the interval cannot be detected. <a href="https://docs.aws.amazon.com/sdk-for-ruby/v2/api/Aws/SQS/Types/SendMessageBatchRequestEntry.html">docs.aws.amazon.com</a></li>
+<li id="s6">Amazon SQS Developer Guide, &ldquo;FIFO queue key terms&rdquo;. Deduplication ID, 5-minute interval, tracking continues after the message is deleted. <a href="https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/FIFO-key-terms.html">docs.aws.amazon.com</a></li>
+<li id="s7">Nawaz Dhandala, &ldquo;SQS Standard vs. FIFO: What Exactly-Once Processing Does and Does Not Guarantee&rdquo; (<i>secondary</i>). Standard queues are at-least-once with best-effort ordering. <a href="https://oneuptime.com/blog/post/2026-07-22-sqs-standard-vs-fifo-exactly-once/">oneuptime.com</a></li>
+</ol>
+
+<div class="pager"><a href="0004-safety-and-liveness.html">&larr; Lesson 4: Safety and liveness</a><a href="../reference/module-0-checklist.html">Module 0 checklist &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-retry.js"></script>
+</body></html>

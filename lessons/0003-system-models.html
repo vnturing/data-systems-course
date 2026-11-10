@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>System models: say your assumptions out loud · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-0-checklist.html">Module 0 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 0 · Lesson 3</p>
+<h1>System models: say your assumptions out loud</h1>
+<p class="lede">Every claim like &ldquo;this is safe&rdquo; or &ldquo;this fails over correctly&rdquo; is secretly conditional. A system model is how you write the condition down.</p>
+<div class="meta"><span>~40 min</span><span>1 interactive</span><span>4-question check</span><span>Builds on Lessons 1 and 2</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Write a three-line system model for any design, spot the claims in a design doc that silently depend on an assumption you do not hold, and explain why every timeout-based failover in your stack is a trade-off and not a fact.</div>
+
+<h2>1. The sentence that makes models necessary</h2>
+<p>In the previous two lessons you reasoned about what a client could and couldn't know, and what a crash could leave behind. Each argument used assumptions: that a crashed process loses memory but not its disk; that a reply might be delayed but not forged. A <b>system model</b> is the explicit list of such assumptions. One university course built on Kleppmann's lecture notes states the stakes in one line: if your fault assumptions are wrong, all bets are off.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>This matters in practice because a correctness argument is only valid <i>inside</i> its model. &ldquo;Our lock is safe&rdquo; is a claim about a model. When someone asks &ldquo;but what if the lock holder pauses for 30 seconds?&rdquo;, they are not nitpicking; they are asking whether your model includes pauses.</p>
+
+<h2>2. Three axes, pick one value on each</h2>
+<p>The standard framing has you choose a behavior for the nodes, the network, and time:<sup class="c"><a href="#s1">[1]</a></sup></p>
+<table>
+<tr><th>Axis</th><th>Options (weakest assumption last)</th><th>What each says</th></tr>
+<tr><td><b>Nodes</b></td><td>crash-stop &rarr; crash-recovery &rarr; Byzantine</td>
+<td><b>Crash-stop:</b> a node may crash at any time and then never executes again. <b>Crash-recovery:</b> it may crash and later resume, having lost in-memory state (durable state survives). <b>Byzantine:</b> it may behave arbitrarily, including maliciously.</td></tr>
+<tr><td><b>Network</b></td><td>reliable &rarr; fair-loss (best-effort) &rarr; arbitrary</td>
+<td><b>Fair-loss:</b> a message sent repeatedly is eventually delivered, but any single message may be lost, duplicated or reordered.<sup class="c"><a href="#s2">[2]</a></sup> <b>Arbitrary:</b> an adversary can interfere with messages.</td></tr>
+<tr><td><b>Timing</b></td><td>synchronous &rarr; partially synchronous &rarr; asynchronous</td>
+<td><b>Synchronous:</b> delays have a known upper bound. <b>Asynchronous:</b> no timing assumptions at all; no timeouts, no clocks. <b>Partially synchronous:</b> behaves synchronously most of the time but sometimes exceeds its bounds for network delay, process pauses, and clock drift.<sup class="c"><a href="#s2">[2]</a><a href="#s3">[3]</a></sup></td></tr>
+</table>
+<p>Real systems usually land on <b>crash-recovery nodes, fair-loss links, partial synchrony</b>, with Byzantine behavior assumed away (checksums and TLS handle the cheap parts of it). The Lesson 1 simulator lives in exactly that world, so you have already been reasoning in this model.</p>
+
+<h3>Mapping your stack (this table is my judgment, not from a source)</h3>
+<table>
+<tr><th>What happens in your environment</th><th>In model terms</th></tr>
+<tr><td>Orchestrator kills and restarts a service; its MySQL data is on a durable volume</td><td>Crash-recovery node. Memory is lost, committed data survives.</td></tr>
+<tr><td>An instance is terminated and its only data lived on ephemeral local storage</td><td>Crash-stop for that data. The node (as far as that state is concerned) never returns.</td></tr>
+<tr><td>A 25-second garbage-collection pause, a VM stall, a noisy-neighbor freeze</td><td>A violation of the timing bound: the node looks dead, then returns. This is what &ldquo;partially synchronous&rdquo; admits and &ldquo;synchronous&rdquo; forbids.</td></tr>
+<tr><td>An RPC over TCP: fine until the connection resets mid-request</td><td>Behaves like a fair-loss link at the request level. You cannot know if the last request arrived (Lesson 1).</td></tr>
+<tr><td>Zone-to-zone connectivity drops for several minutes</td><td>A network partition: some links drop or delay everything for an extended period.</td></tr>
+<tr><td>A bug writes corrupted records and every checksum is valid</td><td>Closer to Byzantine than to anything else. Most designs explicitly exclude it; know that you are excluding it.</td></tr>
+</table>
+
+<h2>3. Why time is the axis that bites: failure detection</h2>
+<p>The key practical question in this lesson is: <i>how do you know a node is dead?</i> You send it heartbeats and declare it dead if you stop hearing them. That is a timeout, and Lesson 1 already told you what a timeout means: only that nothing arrived in time.</p>
+<p>The model-theoretic answer is sharp. A <b>perfect</b> timeout-based failure detector (never wrong) is possible only in a synchronous system with crash-stop nodes and reliable links. Real systems are partially synchronous or asynchronous. There, an <b>eventually perfect</b> detector is possible, which may temporarily mislabel a healthy node as crashed.<sup class="c"><a href="#s1">[1]</a></sup> Notice the word &ldquo;temporarily&rdquo;: false suspicion is not a defect of a particular implementation; it is the price of the model.</p>
+<p>Now feel it. Choose a timeout. The lab replays the same simulated day of heartbeats against each setting.</p>
+
+<div class="widget" id="sim-detector"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>What to notice</h3>
+<ol>
+<li><b>Two costs pull in opposite directions.</b> Shorter timeouts notice real crashes sooner and also suspect healthy nodes more often. There is no free setting, only a cheapest one for the costs you put in.</li>
+<li><b>In bounded mode the false suspicions hit zero.</b> That happens only because the simulated stalls have a known worst case, which makes the world effectively synchronous. Knowing a bound is exactly the extra assumption &ldquo;synchronous&rdquo; buys you.</li>
+<li><b>Turn on heavy-tailed stalls.</b> Now no timeout is both fast and clean; false suspicions fall slowly but do not vanish. That is the partially-synchronous world: the bound exists <i>eventually</i> or <i>sometimes</i> but you do not know it.</li>
+<li><b>The simulator's numbers are made up.</b> Its job is to show the shape of the trade-off. Your real stall distribution is something you can measure (look at the longest gaps between heartbeats in your own metrics) and that measurement is far more valuable than any default.</li>
+</ol>
+
+<h2>4. Where this shows up in your day job</h2>
+<p>Every automated failover has a timeout buried in it: a load balancer's health-check threshold, a replica-promotion tool's &ldquo;primary unreachable for N seconds&rdquo;, a service-discovery TTL. Each is a heartbeat detector. When you tune one, you are moving along the curve in the lab: faster recovery from real failures against more spurious failovers, which have their own cost (a needless failover can itself cause the outage). Lesson 4 gives the vocabulary for that trade; Module 8 goes deep on how pauses defeat leases and what fencing tokens do about it.</p>
+<div class="callout warn"><b class="t">A worked example of a hidden assumption</b>
+&ldquo;The leader holds a 10-second lease and renews every 3 seconds, so there is never more than one leader.&rdquo; Which model is that claim in? One where a process cannot be paused for longer than the lease without noticing. Under partial synchrony a 25-second pause eventually happens: the old leader wakes up still believing it holds the lease while a new leader exists. The claim was true in a synchronous model and false in yours.</div>
+<p>Write your model in one line at the top of every design doc: <code>Nodes: crash-recovery. Network: fair-loss, partitions possible. Timing: partially synchronous (pauses up to ~X s observed).</code> Then check each safety claim against it.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0003"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"Which model best describes a MySQL server rebooting with its disk intact?",
+ "options":["Crash-stop, because the node never returns","Byzantine, because its behavior becomes arbitrary","Synchronous, since reboots finish within bounds","Crash-recovery, memory lost but disk retained"],
+ "answer":3,"why":"Crash-recovery nodes may crash and resume later with in-memory state lost. The disk surviving is exactly what lets recovery logic (like replaying a log) work."},
+{"q":"What can a timeout-based failure detector guarantee in a partially synchronous system?",
+ "options":["It never mislabels a healthy node as crashed","It may mislabel healthy nodes, then eventually correct","It detects crashes instantly regardless of the timeout","It cannot detect crashes unless clocks are synchronized"],
+ "answer":1,"why":"Partial synchrony allows an eventually perfect detector, which can temporarily mislabel a correct node. A perfect detector needs the stronger synchronous, crash-stop, reliable-link model."},
+{"q":"You halve your health-check timeout. What most likely happens?",
+ "options":["Crashes are detected sooner but false failovers increase","False failovers decrease because checks run more frequently","Detection time stays identical while false alarms vanish","Nothing changes because timeouts only affect network packets"],
+ "answer":0,"why":"A shorter timeout shrinks detection delay and makes ordinary stalls look like crashes. The lab's table shows both columns moving in opposite directions."},
+{"q":"Which assumption does a 25-second JVM stop-the-world pause most directly violate?",
+ "options":["Links never lose or reorder messages","Nodes never crash and then recover","Processing delays stay within known bounds","Nodes never behave arbitrarily or maliciously"],
+ "answer":2,"why":"A long pause is a timing-bound violation: the node is alive but unresponsive for longer than the assumed delay. Partial synchrony admits this; synchrony does not."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: write your own model line (10 minutes)</b></summary>
+<p>For one system you run, write the three-line model (nodes, network, timing) and underline any claim in its design doc that needs a stronger assumption than you wrote. If you have monitoring on heartbeat or health-check gaps, note the longest gap you can find in a month; that is your first real measurement of the timing axis.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Ashvin Goel (University of Toronto, ECE419), &ldquo;Models of Distributed Systems&rdquo; (lecture slides; credits Kleppmann and Harris&rsquo;s lecture notes). Node, network and timing models; failure detectors; perfect vs eventually perfect detectors. <a href="https://www.eecg.toronto.edu/~ashvin/courses/ece419/current/lectures/03-models.pdf">PDF</a></li>
+<li id="s2">Gilles Louppe (University of Li&egrave;ge), &ldquo;Lecture 2: Basic distributed abstractions&rdquo;. Process, link and timing abstractions; fair-loss, stubborn and perfect links; asynchronous, synchronous and partially synchronous systems. <a href="https://glouppe.github.io/info8002-large-scale-data-systems/pdf/lec2.pdf">PDF</a></li>
+<li id="s3">denpeshkov, &ldquo;Models of Distributed Systems&rdquo; (<i>secondary</i>; personal study notes, author not identified). Definition of partial synchrony in terms of network delay, process pauses and clock drift. <a href="https://denpeshkov.github.io/cs-notes/Models-of-Distributed-Systems">denpeshkov.github.io</a></li>
+<li>Further reading (not used for claims above): Kleppmann&rsquo;s Cambridge lecture series and notes, listed in <code>RESOURCES.md</code>.</li>
+</ol>
+
+<div class="pager"><a href="0002-what-if-it-dies-right-here.html">&larr; Lesson 2: What if it dies right here?</a><a href="0004-safety-and-liveness.html">Lesson 4: Safety and liveness &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-detector.js"></script>
+</body></html>

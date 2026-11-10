@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What if it dies right here? · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-0-checklist.html">Module 0 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 0 · Lesson 2</p>
+<h1>What if it dies right here?</h1>
+<p class="lede">A review technique for any handler that touches two systems. Your MySQL-plus-Kafka service is the textbook case.</p>
+<div class="meta"><span>~40 min</span><span>1 interactive</span><span>4-question check</span><span>Builds on Lesson 1</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Take any handler that writes to more than one system, list every point where a crash changes the outcome, classify each as clean, lost, phantom or duplicate, and fix the dangerous ones with a transactional outbox plus idempotent consumers.</div>
+
+<h2>1. Two systems, two commits</h2>
+<p>Your order service does this, probably in a dozen places:</p>
+<pre><code>BEGIN;
+INSERT INTO orders (...) VALUES (...);
+COMMIT;                                   -- MySQL now has the order
+producer.send("orders.created", event);   -- Kafka now has the event
+return 201;</code></pre>
+<p>There is no single commit that covers both stores. Between any two lines the process can disappear: a deploy replaces the pod, the kernel OOM-kills it, a spot instance is reclaimed, a host dies. Each of those is a <b>crash-recovery</b> event (the process loses memory, the disks survive; Lesson 3 names this precisely). And from the caller's side each one looks like Lesson 1's timeout.</p>
+<p>Engineers usually describe this problem as <i>dual writes</i>: changing data in two systems, such as a database and a Kafka topic, so that if one operation fails you end up inconsistent, in ways that are hard to detect and fix.<sup class="c"><a href="#s7">[7]</a></sup></p>
+
+<h2>2. The drill</h2>
+<p>The technique is mechanical on purpose. It works at 5 p.m. on a Friday design review.</p>
+<ol>
+<li><b>List every externally visible effect</b> the handler performs, in order. Count the COMMIT as its own effect: before it, nobody else can see the row; after it, everybody can.</li>
+<li><b>Draw a line</b> before the first effect, between each pair, and after the last.</li>
+<li>At each line ask: <i>if the process is killed here and never resumes, what does each system contain?</i></li>
+<li><b>Classify</b> the answer into one of four buckets (below).</li>
+<li>Repeat for the <b>non-crash faults</b>: the second effect returns an error; the reply to the client is lost.</li>
+</ol>
+<table>
+<tr><th>Outcome</th><th>Meaning</th><th>Typical damage</th></tr>
+<tr><td><span class="tag ok">Clean</span></td><td>Nothing happened anywhere, or everything did</td><td>None (client may retry)</td></tr>
+<tr><td><span class="tag bad">Lost</span></td><td>Change committed, never announced</td><td>Shipping never starts; search index stale; billing misses it, silently</td></tr>
+<tr><td><span class="tag bad">Phantom</span></td><td>Announced, but the change never committed</td><td>Downstream acts on something that does not exist</td></tr>
+<tr><td><span class="tag warn">Duplicate</span></td><td>Announced more than once</td><td>Harmless only if consumers are idempotent (Lesson 1)</td></tr>
+</table>
+<p>These are consequences of two stores not sharing a commit. They are not bugs in MySQL or Kafka.</p>
+
+<div class="widget" id="sim-dualwrite"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h2>3. Reading the table</h2>
+<h3>Design A (commit, then publish)</h3>
+<p>The <b>lost event</b> lives in the gap between COMMIT and PRODUCE. It is a few milliseconds wide, but a width times a volume is a rate: at a million orders a day, a few-millisecond window gets hit by routine deploys. And lost events are the quiet kind. Nothing errors; a downstream system just never hears about an order.</p>
+<h3>Design B (publish, then commit)</h3>
+<p>Swapping the order merely trades lost events for <b>phantom events</b>, which are usually worse because consumers have already acted. B has a second, subtler problem visible in the last row of the table: it breaks <i>without any crash at all</i>. A deadlock or constraint violation at COMMIT, a perfectly ordinary error, leaves a published event for a transaction that rolled back.</p>
+<h3>Design C (outbox)</h3>
+<p>The order row and an <code>outbox</code> row commit in one MySQL transaction. A separate <b>relay</b> reads committed outbox rows and publishes them. This is the pattern Debezium's authors describe for letting a service update its own store and notify others safely, giving the writer read-your-own-writes behavior and reliable but eventually consistent exchange with other services.<sup class="c"><a href="#s1">[1]</a></sup> Look at what remains in the table: no loss, no phantom. Only <b>duplicates</b>, and only when the relay dies between publishing a row and recording that it did so.</p>
+<p>That residue is not an accident. The relay has the same two-system problem in miniature (publish, then mark sent), but the outbox arranges for it to fail in the <i>safe direction</i>: at-least-once. You moved the hazard from a place where it loses information to a place where it repeats it, and repetition is something Lesson 1 taught you to absorb.</p>
+
+<h2>4. "Can't I use Kafka transactions for this?"</h2>
+<p>Kafka's transactions make read-process-write cycles atomic and fence out zombie producers, which gives exactly-once processing <i>between Kafka topics</i>.<sup class="c"><a href="#s2">[2]</a></sup> The idempotent producer protects against duplicates created by a producer's own retries.<sup class="c"><a href="#s3">[3]</a></sup> Neither makes a MySQL write a participant. One practitioner guide states the boundary plainly: idempotence and transactions do not automatically make a database write, API call or other external side effect exactly once.<sup class="c"><a href="#s6">[6]</a></sup> Distributed commit protocols that <i>do</i> span stores exist; Module 9 covers two-phase commit and why teams usually avoid it here.</p>
+
+<h2>5. The outbox in practice (MySQL + Kafka)</h2>
+<pre><code>BEGIN;
+INSERT INTO orders (id, idempotency_key, ...) VALUES (...);   -- UNIQUE(idempotency_key)
+INSERT INTO outbox (event_id, type, payload) VALUES (UUID(), 'order.created', ?);
+COMMIT;</code></pre>
+<p>Two relay styles, with real trade-offs:</p>
+<ul>
+<li><b>Polling relay.</b> A small process queries for unsent rows, publishes them, and marks them sent. It is easy to reason about and easy to explain, but it costs a query on every interval, an update for each event, and extra coordination once you run several publishers.<sup class="c"><a href="#s5">[5]</a></sup> If it stops after Kafka acknowledges but before marking the row, it publishes the same event again.<sup class="c"><a href="#s5">[5]</a></sup></li>
+<li><b>Change data capture.</b> Debezium reads the database's transaction log and publishes outbox rows via a ready-made event router (an SMT, a Kafka Connect transform).<sup class="c"><a href="#s1">[1]</a></sup> Secondary sources report the MySQL connector supports the same router; confirm against the Debezium documentation for your version.<sup class="c"><a href="#s4">[4]</a></sup> You trade polling load for an extra moving part to operate.</li>
+</ul>
+<p><b>Both deliver at-least-once.</b> Debezium commits its progress after writing events to Kafka, so a crash between the two re-emits events on restart: protection against loss at the price of possible duplicates.<sup class="c"><a href="#s4">[4]</a></sup> The fix is exactly Lesson 1's: give every event a stable id (the outbox row's <code>event_id</code>) and have consumers <b>record processed ids in the same transaction as their side effect</b>. The event id is the idempotency key for the consumer.</p>
+
+<h2>6. The gap that is still open</h2>
+<p>Return to the table's &ldquo;timeout&rdquo; rows. Even with a perfect outbox, the <i>client</i> may have seen a timeout after the order committed, and a blind retry creates a second order. That is why the sketch above carries <code>UNIQUE(idempotency_key)</code> on the order itself: a retry hits the unique constraint, and the handler returns the existing order instead of inserting another. (This combination is a synthesis of Lesson 1's key design and this lesson's outbox, not a quote from a source.) Two different duplicate problems, two idempotency keys: one from the client, one for the event.</p>
+
+<h2>7. Check yourself</h2>
+<div class="quiz" data-lesson-id="0002"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"A service commits an order to MySQL, then crashes before publishing to Kafka. What is the resulting state?",
+ "options":["Kafka holds an event for an uncommitted order","The order exists but no event was published","Both stores roll back and nothing remains anywhere","The event is published twice after the restart"],
+ "answer":1,"why":"The COMMIT already made the order durable, and nothing re-drives the publish. That is a lost event: silent, and only discoverable by reconciliation."},
+{"q":"Which ordering of steps turns a failed MySQL commit into a phantom event?",
+ "options":["Insert, commit, then publish to Kafka afterward","Write order plus outbox row in transaction","Poll the outbox table and publish rows","Insert, publish to Kafka, then commit last"],
+ "answer":3,"why":"Publishing before the COMMIT means a deadlock or constraint error at COMMIT rolls back the order while the event is already out. No crash is required."},
+{"q":"An outbox relay publishes a row to Kafka, then crashes before marking it sent. After restart, what do consumers see?",
+ "options":["The event delivered twice, requiring consumer deduplication","No event because the row was lost","A phantom event for a rolled-back order","Kafka's idempotent producer suppresses the repeat automatically"],
+ "answer":0,"why":"Publish-then-mark is two steps, so the relay is at-least-once. Duplicates after a crash are inherent; the safe response is for consumers to dedupe on the event id."},
+{"q":"Which statement about Kafka transactions and your MySQL write is accurate?",
+ "options":["Kafka transactions can atomically commit the MySQL insert too.","Idempotent producers make the database write exactly-once automatically too.","Kafka transactions make Kafka reads and writes atomic only.","Transactions are unnecessary because acks=all already provides atomicity everywhere."],
+ "answer":2,"why":"Kafka's transactional guarantees cover Kafka's own log and offsets. A MySQL row is not a participant, which is why the outbox moves the coordination problem into MySQL's own transaction."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: apply it to a real handler (about 20 minutes)</b></summary>
+<p>Pick one handler of yours that writes to MySQL and also publishes to Kafka (or SQS, or calls another service). Write its effects in order, draw the lines, and fill in a four-bucket outcome for each. Then answer: <i>which row would you least like to explain to a customer?</i> Nothing in the course depends on you doing this; it simply turns the lesson into a review habit.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Debezium blog, &ldquo;Reliable Microservices Data Exchange With the Outbox Pattern&rdquo; (primary for the pattern and the Outbox Event Router). <a href="https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/">debezium.io</a></li>
+<li id="s2">Confluent, &ldquo;Transactions in Apache Kafka&rdquo;. What Kafka transactions guarantee (atomic read-process-write cycles, zombie fencing). <a href="https://www.confluent.io/blog/transactions-apache-kafka/">confluent.io/blog</a></li>
+<li id="s3">Confluent documentation, &ldquo;Kafka Message Delivery Guarantees&rdquo;. Producer retries, idempotent producer, transactional delivery. <a href="https://docs.confluent.io/kafka/design/delivery-semantics.html">docs.confluent.io</a></li>
+<li id="s4">RisingWave, &ldquo;CDC Exactly-Once Semantics: Debezium vs RisingWave Guarantees&rdquo; (<i>secondary</i>; vendor blog). Debezium at-least-once behavior on crash; dual-write description and MySQL support claims come from their related outbox write-ups. <a href="https://risingwave.com/blog/cdc-exactly-once-semantics-debezium-risingwave">risingwave.com</a> &middot; <a href="https://risingwave.com/blog/debezium-outbox-pattern-microservices">outbox write-up</a></li>
+<li id="s5">The Main Thread, &ldquo;Quarkus Transactional Outbox: Recover Kafka Events After a Crash&rdquo; (<i>practitioner article</i>). Polling-relay costs and crash-after-send duplicates. <a href="https://www.the-main-thread.com/p/quarkus-checkout-outbox">the-main-thread.com</a></li>
+<li id="s6">ActiveWizards, &ldquo;Kafka Exactly-Once Semantics&rdquo; (<i>secondary</i>). States that idempotence and transactions do not by themselves make external side effects exactly-once. <a href="https://activewizards.com/blog/kafka-exactly-once-semantics-guide/">activewizards.com</a></li>
+<li id="s7">Eresh Gorantla, &ldquo;Outbox Pattern for reliable data exchange between Microservices&rdquo; (<i>practitioner article</i>). Definition of the dual-write problem. <a href="https://medium.com/codex/outbox-pattern-for-reliable-data-exchange-between-microservices-9c938e8158d9">medium.com/codex</a></li>
+</ol>
+
+<div class="pager"><a href="0001-the-timeout-problem.html">&larr; Lesson 1: The timeout problem</a><a href="0003-system-models.html">Lesson 3: System models &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-dualwrite.js"></script>
+</body></html>

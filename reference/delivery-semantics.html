@@ -36,7 +36,7 @@
 <li>Store the <b>response</b>, not just the key, so a retry gets the same answer.</li>
 <li><b>Compare request parameters</b> with the stored request; reject mismatches (caller bug).</li>
 <li>Handle <b>concurrent duplicates</b>: in-flight marker, wait, or reject with a retryable status.</li>
-<li>Retention window &gt; longest client retry window. Document it.</li>
+<li>Retention window &gt; longest client retry window. Document it. (SQS FIFO deduplication, for example, has a 5-minute interval; a resend with the same id after it can create another message.)</li>
 <li>Key store must be as durable as the data it protects (an in-memory-only table is forgotten on crash).</li>
 <li>Decide what to do with <b>errors</b>: cache them (Stripe caches even 500s) or allow re-execution. Be explicit.</li>
 </ol>

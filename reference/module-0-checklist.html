@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Module 0 checklist · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="delivery-semantics.html">Delivery semantics sheet</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Reference sheet · Module 0</p>
+<h1>Module 0 design-review checklist</h1>
+<p class="lede">One page for design reviews. Each block names the lesson it comes from. Print-friendly.</p>
+
+<h2>1. The crash-point drill <small>(Lesson 2)</small></h2>
+<ol>
+<li>List every externally visible effect in order (COMMIT counts as one).</li>
+<li>Draw a line before, between and after the effects.</li>
+<li>At each line: process killed here, never resumes. What does each system contain?</li>
+<li>Classify: <span class="tag ok">clean</span> <span class="tag bad">lost</span> <span class="tag bad">phantom</span> <span class="tag warn">duplicate</span>.</li>
+<li>Repeat for: second effect errors out; reply to caller lost.</li>
+</ol>
+<table>
+<tr><th>Pattern</th><th>Fails as</th></tr>
+<tr><td>Commit, then publish</td><td>Lost event</td></tr>
+<tr><td>Publish, then commit</td><td>Phantom event (even without a crash: commit errors)</td></tr>
+<tr><td>Outbox (row in the same transaction) + relay</td><td>Duplicate only. Consumers must dedupe on event id.</td></tr>
+</table>
+<p>Kafka transactions and idempotent producers cover Kafka, not your MySQL row. Put an <code>UNIQUE(idempotency_key)</code> on the order for client retries, and an event id for consumers.</p>
+
+<h2>2. The model line <small>(Lesson 3)</small></h2>
+<p>Put this at the top of every design doc and check each safety claim against it:</p>
+<pre><code>Nodes: crash-recovery (memory lost, disk survives)
+Network: fair-loss; partitions possible
+Timing: partially synchronous (observed pauses up to ~__ s)</code></pre>
+<ul>
+<li>Perfect failure detection needs synchrony. In partial synchrony a detector is <i>eventually</i> right and may temporarily accuse healthy nodes.</li>
+<li>Every health-check threshold, promotion delay and TTL is a point on the detection-speed versus false-failover curve. Measure your longest heartbeat gaps before choosing.</li>
+<li>&ldquo;Lease/lock is safe&rdquo; claims need an assumption about maximum pause length. Ask what happens when it is exceeded.</li>
+</ul>
+
+<h2>3. Safety / liveness pairs <small>(Lesson 4)</small></h2>
+<p>Write each requirement as: <i>&ldquo;Never ___ (safety). May stall for ___ (liveness we sacrificed).&rdquo;</i> Test: can you point to a moment it went wrong (safety), or only to &ldquo;not yet&rdquo; (liveness)?</p>
+<table>
+<tr><th>Kafka topic profile</th><th>acks</th><th>min.insync.replicas</th><th>unclean election</th><th>Producer</th></tr>
+<tr><td>Must not lose (billing, ledger)</td><td>all</td><td>2 (with RF 3)</td><td>false</td><td>idempotence on</td></tr>
+<tr><td>Loss tolerable (metrics, logs)</td><td>1 (or all)</td><td>1</td><td>deliberately chosen</td><td>idempotence on</td></tr>
+</table>
+<ul>
+<li>min.insync.replicas has no effect with acks=1. acks=all with min ISR 1 acknowledges from one copy once the ISR shrinks.</li>
+<li>Read the <b>effective</b> config on the cluster. Old docs list unclean election default true; current references list false.</li>
+</ul>
+
+<h2>4. Retry rules <small>(Lessons 1 and 5)</small></h2>
+<ol>
+<li>Timeout on every remote call (connect and request). Choose it from a latency percentile: pick the false-timeout rate you accept (say 0.1%) and use the matching percentile (p99.9).</li>
+<li>Retry only operations that are safe to repeat, or that carry an idempotency key generated once per logical operation.</li>
+<li>Capped exponential backoff <b>with jitter</b> (full jitter: random(0, min(cap, base*2^attempt))). Jitter periodic jobs too.</li>
+<li>Bound retries with a retry budget (token bucket) and a low max attempt count.</li>
+<li>Count the layers: attempts multiply (3 x 3 x 3 = 27). Prefer retrying at one layer.</li>
+<li>Retry window must be shorter than every dedupe window it relies on.</li>
+</ol>
+<table>
+<tr><th>Mechanism</th><th>Dedupe window</th></tr>
+<tr><td>Stripe Idempotency-Key</td><td>Keys may be pruned after &ge; 24 h</td></tr>
+<tr><td>SQS FIFO MessageDeduplicationId</td><td>5 minutes</td></tr>
+<tr><td>SQS standard queue</td><td>None; at-least-once. Consumers dedupe.</td></tr>
+<tr><td>Kafka idempotent producer</td><td>Producer retries only; not your DB write</td></tr>
+<tr><td>Debezium / outbox relay</td><td>None; at-least-once. Consumers dedupe on event id.</td></tr>
+</table>
+
+<h2>Ten questions for any design review</h2>
+<ol>
+<li>What is the system model? Which claims need a stronger one?</li>
+<li>Which effects span two systems? What does each crash point leave behind?</li>
+<li>What happens if the client retries after a timeout?</li>
+<li>Where is the dedupe record, and does it commit atomically with the effect?</li>
+<li>What is each safety property, and what is each liveness property we sacrificed for it?</li>
+<li>What are the timeouts, and what false-timeout rate do they imply?</li>
+<li>How many retry layers stack on this path? What bounds the total?</li>
+<li>Is there jitter on retries and periodic work?</li>
+<li>Which dedupe windows exist, and is the retry window shorter than each?</li>
+<li>What does a false failure detection cost here, and who decided the threshold?</li>
+</ol>
+
+<h2>Sources</h2>
+<p>See the &ldquo;Sources used in this lesson&rdquo; section of Lessons <a href="../lessons/0001-the-timeout-problem.html">1</a>, <a href="../lessons/0002-what-if-it-dies-right-here.html">2</a>, <a href="../lessons/0003-system-models.html">3</a>, <a href="../lessons/0004-safety-and-liveness.html">4</a> and <a href="../lessons/0005-retries-backoff-and-jitter.html">5</a>. Secondary sources are labeled there.</p>
+<div class="pager"><a href="../index.html">&larr; Course home</a><a href="../syllabus.html">Syllabus &rarr;</a></div>
+</main></body></html>

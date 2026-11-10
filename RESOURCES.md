@@ -1,6 +1,6 @@
 # Data Systems Resources
 
-Verification status: entries below were located and checked via web search on 2026-11-09 unless marked otherwise.
+Verification status: entries below were located and checked via web search on 2026-11-09 (first batch) and 2026-11-10 (second batch) unless marked otherwise. "Secondary" means a blog, vendor page or notes that restate a primary source; verify against the primary before relying on specifics.
 
 ## Knowledge
 
@@ -27,6 +27,29 @@ Verification status: entries below were located and checked via web search on 20
 - [Docs: PostgreSQL SET TRANSACTION and concurrency control chapter](https://www.postgresql.org/docs/current/transaction-iso.html)
   Authoritative description of Read Committed, Repeatable Read (snapshot) and Serializable as implemented in Postgres. Use for: Module 7. URL not yet fetched; the SET TRANSACTION man page was seen via search.
 
+### Added 2026-11-10 (Lessons 2 to 5)
+
+- [Blog: Reliable Microservices Data Exchange With the Outbox Pattern, Debezium](https://debezium.io/blog/2019/02/19/reliable-microservices-data-exchange-with-the-outbox-pattern/)
+  Primary source for the outbox pattern and the Outbox Event Router. Fully read via search snippets; fetch before quoting details. Use for: Lesson 2, Module 11.
+- [Doc: Kafka message delivery guarantees, Confluent](https://docs.confluent.io/kafka/design/delivery-semantics.html)
+  Producer retries, idempotent producer (0.11.0.0), transactional delivery, Streams exactly-once. Use for: Lessons 2, 4; Module 11.
+- [Blog: Transactions in Apache Kafka, Confluent](https://www.confluent.io/blog/transactions-apache-kafka/)
+  What transactions guarantee: atomic read-process-write cycles and zombie fencing. Use for: Lesson 2, Module 11.
+- [Article: Amazon Builders' Library, Timeouts, retries, and backoff with jitter (Marc Brooker)](https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter)
+  Primary. Timeouts by percentile (false-timeout rate), selfish retries, backoff, jitter, side effects, layered retries. Read via search snippets only; fetch the full article before citing section-level detail (token buckets, circuit breakers). Use for: Lesson 5.
+- [Blog: Exponential Backoff And Jitter, AWS Architecture Blog (Marc Brooker)](https://aws.amazon.com/blogs/architecture/exponential-backoff-and-jitter/)
+  Primary. Full, equal and decorrelated jitter; simulation of optimistic concurrency control; SDK support note. Use for: Lesson 5.
+- [Docs: Amazon SQS FIFO key terms](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/FIFO-key-terms.html) and [Exactly-once processing in SQS](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/FIFO-queues-exactly-once-processing.html)
+  5-minute deduplication interval; dedupe id tracked after delete. Use for: Lesson 5, Module 11. Standard-queue at-least-once semantics were only confirmed via a secondary source; fetch the AWS standard-queue page.
+- [Lecture: RPCs and failures, Princeton COS 418] (see above) also backs Lessons 2 and 5.
+- [Slides: Models of Distributed Systems, University of Toronto ECE419](https://www.eecg.toronto.edu/~ashvin/courses/ece419/current/lectures/03-models.pdf)
+  Derived from Kleppmann and Harris's notes. System model axes, failure detectors (perfect vs eventually perfect). Use for: Lesson 3, Module 8.
+- [Slides: Basic distributed abstractions, ULiege INFO8002 (Louppe)](https://glouppe.github.io/info8002-large-scale-data-systems/pdf/lec2.pdf)
+  Process, link and timing abstractions. Use for: Lesson 3.
+- [Explainer: Defining Safety and Liveness (Will Schultz)](https://will62794.github.io/formal-methods/2020/08/01/safety-and-liveness.html)
+  Educator write-up of Alpern and Schneider 1985 with the finite-prefix characterization. Companion: [Northeastern slides](https://khoury.northeastern.edu/~stavros/10-safety-liveness.pdf). Original paper: Alpern and Schneider, "Defining Liveness", IPL 21(4), 1985, doi 10.1016/0020-0190(85)90056-0 (not fetched). Use for: Lesson 4, Module 9.
+- Secondary, used with labels in lessons: RisingWave on Debezium at-least-once ([link](https://risingwave.com/blog/cdc-exactly-once-semantics-debezium-risingwave)); The Main Thread on a Quarkus outbox ([link](https://www.the-main-thread.com/p/quarkus-checkout-outbox)); ActiveWizards on Kafka EOS ([link](https://activewizards.com/blog/kafka-exactly-once-semantics-guide/)); Manning liveBook Kafka concept pages; Conduktor Kafka docs on min.insync.replicas and unclean election; AxonOps broker config; NextPoint review of the Builders' Library article; Lumigo summary of the same.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -34,11 +57,17 @@ Verification status: entries below were located and checked via web search on 20
 
 ## Seen, not yet verified (do not cite until read)
 
+- Official Apache Kafka documentation for `unclean.leader.election.enable`, `min.insync.replicas` and `acks`. Lesson 4 relies on secondary sources and a Cloudera page for an older Kafka that lists a different default (true). Fetch kafka.apache.org docs for the current version and replace those citations.
+- Debezium MySQL connector documentation and Outbox Event Router docs: confirm MySQL support and delivery semantics directly (Lesson 2 cites secondary sources for MySQL support).
+- Datadog, "Kafka at Datadog": mentioned by Conduktor as a practitioner view on unclean election; not read.
 - Kleppmann, "Please stop calling databases CP or AP" (martin.kleppmann.com/2015/02/11/...): referenced by a secondary site; fetch the original before Lesson 9.2.
 - Kleppmann and Riccomini, Designing Data-Intensive Applications, 2nd ed. (O'Reilly, 2026): mentioned in Cambridge Databases notes. This course is inspired by the topic space, not a copy of any chapter.
 
 ## Gaps
 
+- MySQL-specific: replication and semi-sync docs, InnoDB isolation levels and MVCC, Group Replication, binlog/GTID, Debezium MySQL connector. (Learner runs MySQL.)
+- AWS-specific: RDS and Aurora failover behavior, MSK defaults and configuration, DynamoDB consistency and transactions, SQS standard queue docs, SDK retry modes and defaults per language.
+- Percentiles and queueing for Module 1: Dean and Barroso, The Tail at Scale; a queueing/Little's law reference; Google SRE book on SLOs.
 - Storage engines: need primary sources for LSM-trees, B-trees/WAL, column stores (LSM paper, Bigtable, a column-store paper, RocksDB/LevelDB docs).
 - Time and clocks: Lamport's "Time, Clocks..." paper, Spanner/TrueTime, fencing-token write-ups.
 - Transactions: Berenson et al. "A Critique of ANSI SQL Isolation Levels", Cahill SSI paper, Helland "Life beyond distributed transactions".

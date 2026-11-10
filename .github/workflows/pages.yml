@@ -16,9 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Test simulators and lint quizzes
-        run: |
-          node tools/test-sim.js
-          python3 tools/check-quiz.py
+        run: sh tools/check-all.sh
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
