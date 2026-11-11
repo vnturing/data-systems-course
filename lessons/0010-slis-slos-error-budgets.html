@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SLIs, SLOs and error budgets · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 1 · Lesson 10</p>
+<h1>SLIs, SLOs and error budgets</h1>
+<p class="lede">&ldquo;Reliable&rdquo; is not a number. This lesson turns it into one, and turns the number into a way to decide when to ship and when to stop.</p>
+<div class="meta"><span>~45 min</span><span>2 interactives</span><span>4-question check</span><span>Builds on Lessons 6 to 9</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Write an SLI and SLO for a service, convert an SLO into a concrete error budget in minutes or requests, read an incident as budget burned and burn rate, and see why a service&rsquo;s availability is capped by the dependencies it cannot do without.</div>
+
+<h2>1. Three terms, three audiences</h2>
+<p>The vocabulary comes from Google&rsquo;s SRE book. An <b>SLI</b> (service level indicator) is a carefully defined quantitative measure of some aspect of the level of service provided. An <b>SLO</b> (objective) is a target value or range of values for a service level measured by an SLI; a natural form is &ldquo;SLI &le; target&rdquo; or &ldquo;lower bound &le; SLI &le; upper bound&rdquo;. An <b>SLA</b> (agreement) is an explicit or implicit contract with users that includes consequences of meeting or missing the SLOs it contains.<sup class="c"><a href="#s1">[1]</a></sup> So: the SLI is the measurement, the SLO is the internal target, the SLA is the contract with consequences. SLAs usually sit looser than the SLOs behind them.<sup class="c"><a href="#s3">[3]</a></sup></p>
+<p>The chapter also makes two points that save a lot of arguments. You should not use every metric you can track as an SLI; understanding what users want should drive the selection of a few indicators.<sup class="c"><a href="#s1">[1]</a></sup> And even a service with no SLA benefits from defining SLIs and SLOs to manage the service.<sup class="c"><a href="#s1">[1]</a></sup></p>
+
+<h2>2. Choosing indicators that mean something</h2>
+<ul>
+<li><b>Start from user value, not from what you can measure.</b> Google&rsquo;s Cloud Reliability Engineers describe picking SLOs that represent the most critical aspects of the user experience.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li><b>Prefer threshold counts over averages for latency.</b> &ldquo;99% of requests complete in under 300 ms&rdquo; is an SLI-plus-target built from a fraction, and it is the same statement as &ldquo;p99 &le; 300 ms&rdquo;. Using two thresholds is common: their example SLO table pairs a tight bound that most requests should meet with a loose bound that nearly all must (50% under 250 ms and 99% under 3,000 ms).<sup class="c"><a href="#s2">[2]</a></sup> This is Lesson 7 in SLO form: a mean cannot be a promise to any individual user.</li>
+<li><b>Count slowness as failure when it is.</b> The same source treats requests that take longer than 30 seconds as if the service were down, counting them against availability.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li><b>Measure as near the user as you can.</b> Client-side latency is often more relevant, but if you can only measure at the server, that is a proxy and the SLI should say so.<sup class="c"><a href="#s1">[1]</a></sup> Lesson 7&rsquo;s timer-starts-too-late problem applies directly.</li>
+</ul>
+
+<h2>3. The error budget</h2>
+<p>If the SLO is 99.9%, the system is <i>allowed</i> to be bad 0.1% of the time. That allowance is the <b>error budget</b>: 1 &minus; SLO.<sup class="c"><a href="#s3">[3]</a></sup> Its value is organizational: while budget remains, releases and experiments may proceed; when it is spent, reliability work takes priority. The SRE book frames it as: as long as there is error budget remaining, new releases can be pushed.<sup class="c"><a href="#s4">[4]</a></sup> Each additional nine cuts the budget tenfold while the cost of delivering it climbs steeply; the book warns that an incremental improvement may cost 100 times more than the previous one.<sup class="c"><a href="#s4">[4]</a></sup></p>
+<h3>Burn rate</h3>
+<p>One number makes incidents comparable: <b>burn rate</b> = observed error rate &divide; allowed error rate (my definition; the formula is simple). Burn rate 1 spends the budget exactly over the window. A total outage against a 99.9% SLO burns at 1,000&times; and would consume a 30-day budget in about 43 minutes; 5% errors burn at 50&times;, lasting about 14 hours. Burn rate is what tells you how urgent an incident is, which a raw error count cannot.</p>
+<div class="widget" id="sim-slo"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>A 99.9% SLO leaves about 43 minutes a month.</b> Two ordinary incidents can spend it. Slide to 99.99% and the budget is under five minutes; at 99.999% it is about 26 seconds. A single TCP-level hiccup can exceed that.</li>
+<li><b>The same incident list is fine at 99.5% and a freeze at 99.9%.</b> The SLO, not the incident, decides what the incidents mean. Choosing the SLO is choosing a policy.</li>
+<li><b>Small, long incidents can cost as much as short, total ones.</b> Compare the 90-minute 5%-error incident to a 4.5-minute total outage: identical budget cost, wildly different burn rate and urgency.</li>
+<li><b>The budget model assumes uniform traffic.</b> If your traffic is bursty, an outage at peak costs more users than the same minutes at night. Count requests, not minutes, if the difference matters.</li>
+</ol>
+
+<h2>4. Dependencies set a ceiling</h2>
+<p>If your request needs several services to all work, and they fail independently, the availabilities multiply. Five hard dependencies at 99.9% give about 99.5% before your own bugs add anything.</p>
+<div class="widget" id="sim-composite"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>Two consequences. First, a 99.95% SLO for a service with five 99.9% hard dependencies is a promise that requires either luck or a change in structure: make some dependencies <b>optional</b> (degrade instead of fail), or make them redundant with a design that avoids Lesson 6&rsquo;s common-mode trap. Second, the multiplication assumes independence, which is exactly the assumption Lesson 6 taught you to doubt: two dependencies that share a zone or a provider fail together, so the real availability is usually better than the product when failures are positively correlated, and your <i>incidents</i> are lumpier.</p>
+<p>Finally, the SRE book&rsquo;s counterintuitive advice: don&rsquo;t over-achieve.<sup class="c"><a href="#s5">[5]</a></sup> A service consistently far better than its SLO sets user expectations the SLO does not promise, and dependents start relying on it. (Summarized from the book; I did not read this passage directly.)</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0010"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"What is a 99.9% availability SLO's error budget over 30 days?",
+ "options":["About 4.3 minutes","About 43 minutes","About 7.2 hours","About 72 minutes"],
+ "answer":1,"why":"30 days is 43,200 minutes and 0.1% of that is 43.2 minutes."},
+{"q":"Against a 99.9% SLO, an incident returns 100% errors. What is the burn rate?",
+ "options":["1x","10x","100x","1,000x"],
+ "answer":3,"why":"Burn rate is the observed error rate divided by the allowed error rate: 100% / 0.1% = 1,000. At that pace a 30-day budget lasts about 43 minutes."},
+{"q":"Which statement about SLOs and SLAs is correct?",
+ "options":["An SLA attaches consequences; an SLO is an internal target","An SLO attaches consequences; an SLA is purely internal here","Both are always exactly identical numbers in every real organization","SLAs only measure latency while SLOs measure only error rates"],
+ "answer":0,"why":"An SLA is a contract with consequences for missing its objectives. An SLO is the target itself, usually stricter, owned by the engineering team."},
+{"q":"Five hard dependencies each have 99.9% availability. What is the best-case composite?",
+ "options":["About 99.9%","About 99.7%","About 99.5%","About 99.0%"],
+ "answer":2,"why":"0.999^5 is about 0.995. Availabilities of independent serial dependencies multiply, so the chain is weaker than any single link."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: draft one SLO (15 minutes)</b></summary>
+<p>For one user-facing service, write: the user journey you care about, one availability SLI (good requests over valid requests), one latency SLI as a threshold count, targets for each, the 30-day budget each implies, and what you would do the day it is spent. If you cannot name the action, the SLO is decorative.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Google SRE book, ch. 4 &ldquo;Service Level Objectives&rdquo; (primary; definitions of SLI, SLO, SLA, choosing few indicators, proxies). <a href="https://sre.google/sre-book/service-level-objectives">sre.google</a></li>
+<li id="s2">Robert van Gent, &ldquo;Building good SLOs&mdash;CRE life lessons&rdquo;, Google Cloud blog, 2017 (primary-adjacent): picking SLOs from critical user experience, slow requests as downtime, the two-threshold latency table. <a href="https://cloud.google.com/blog/products/gcp/building-good-slos-cre-life-lessons/">cloud.google.com</a></li>
+<li id="s3">ClickHouse, &ldquo;SLO, SLI, SLA&rdquo; and a DevOps/SRE hub page (<i>secondary</i>): error budget as 1 &minus; SLO; SLAs set looser than SLOs per the SRE Workbook. <a href="https://clickhouse.com/resources/engineering/slo-sli-sla">clickhouse.com</a> &middot; <a href="https://resumegeni.com/blog/sre-engineer/slos-and-error-budgets">resumegeni.com</a></li>
+<li id="s4">Quoted from the SRE book, chapters 3 and 4 (&ldquo;Embracing Risk&rdquo;), via the ClickHouse article above (<i>secondary quotation</i>): releases while budget remains; each increment may cost 100&times; more. <a href="https://clickhouse.com/resources/engineering/slo-sli-sla">clickhouse.com</a></li>
+<li id="s5">Coding Blocks, &ldquo;Site Reliability Engineering: SLIs, SLOs, SLAs&rdquo; (<i>secondary summary of the book</i>): don&rsquo;t overachieve, injecting downtime to match the SLO. <a href="https://www.codingblocks.net/podcast/site-reliability-engineering-slis-slos-slas/">codingblocks.net</a></li>
+<li>The SRE Workbook&rsquo;s multi-window burn-rate alerting is the natural next read; I did not verify it here. The budget and burn-rate arithmetic in the lab is checked by <code>tools/test-slo.js</code>.</li>
+</ol>
+
+<div class="pager"><a href="0009-queueing-and-the-cliff.html">&larr; Lesson 9: Queueing and the cliff</a><a href="0011-operability-and-admission-control.html">Lesson 11: Operability and admission control &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-slo.js"></script>
+</body></html>

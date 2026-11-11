@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Percentiles and the tail · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 1 · Lesson 7</p>
+<h1>Percentiles, the tail, and how to measure latency honestly</h1>
+<p class="lede">The average describes almost no real request. Worse, the usual ways of combining and generating latency numbers can make a bad system look healthy.</p>
+<div class="meta"><span>~55 min</span><span>3 interactives</span><span>4-question check</span><span>Builds on Lessons 5 and 6</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Pick the right latency statistic for a decision, compute how fan-out inflates tail latency, explain what hedged requests buy, and spot the two measurement traps (averaged percentiles and coordinated omission) that corrupt dashboards and load tests.</div>
+
+<h2>1. The mean lives where no request does</h2>
+<p>Latency distributions are right-skewed: most requests are fast, a few are very slow. The mean lands between the two groups, so it describes neither. Google&rsquo;s SRE writing reaches the same conclusion from the other direction: averages can hide outliers,<sup class="c"><a href="#s2">[2]</a></sup> and the summaries of the SRE book&rsquo;s SLO chapter I read recommend percentile or distribution-based indicators instead.<sup class="c"><a href="#s3">[3]</a></sup> (Read the chapter itself<sup class="c"><a href="#s1">[1]</a></sup> for its exact wording; I verified only its framing of latency as a key indicator.) A percentile is simply a position in the sorted list of response times: p99 is the value that 99% of requests beat.<sup class="c"><a href="#s3">[3]</a></sup></p>
+<p>The lab simulates one minute of traffic on two hosts, one with occasional stalls and one healthy, and shows what happens when you try to summarize the fleet.</p>
+<div class="widget" id="sim-percentiles"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>The merging trap</h3>
+<p>A percentile is an order statistic: computing one needs the full sorted distribution, and a finished percentile cannot be recombined. Averaging per-host p99s, or averaging 60 per-minute p99s into an hourly one, yields a number that is not the p99 of anything.<sup class="c"><a href="#s3">[3]</a></sup> Scalable systems keep <b>mergeable</b> summaries instead: histogram buckets, or quantile sketches such as HdrHistogram, t-digest and DDSketch, each with a known error bound.<sup class="c"><a href="#s3">[3]</a></sup> Whatever your metrics stack is, find out whether it stores histograms (mergeable) or precomputed percentiles (not). Look at the lab&rsquo;s &ldquo;average of p99s&rdquo; line against the true fleet p99.</p>
+
+<h2>2. The tail at scale</h2>
+<p>Dean and Barroso&rsquo;s &ldquo;The Tail at Scale&rdquo; (Google, CACM 2013) is the canonical treatment.<sup class="c"><a href="#s4">[4]</a></sup> Their arithmetic: take a server that usually answers in 10 ms but has a 99th-percentile latency of one second. If a request hits one such server, 1 in 100 requests is slow. If a user request must collect responses from 100 such servers in parallel, <b>63% of user requests will take more than one second</b>. Even at one-in-10,000 per server, a request spanning 2,000 servers sees about one in five slow.<sup class="c"><a href="#s4">[4]</a></sup> A handy recipe for your own system, from Colyer&rsquo;s summary rather than the paper: take the acceptable percentile (say 0.999) and raise it to the power of the number of servers involved.<sup class="c"><a href="#s5">[5]</a></sup></p>
+<p>Fan-out is not exotic. A page that calls eight microservices, a query that touches every shard, a batch of 50 DynamoDB or MySQL point reads issued in parallel: each is a fan-out, and each inherits the tail.</p>
+<div class="widget" id="sim-fanout-tail"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>Tail tolerance</h3>
+<p>The paper&rsquo;s response is to build <i>tail-tolerant</i> systems, much as fault-tolerant ones build a reliable whole from unreliable parts.<sup class="c"><a href="#s4">[4]</a></sup> Techniques include:</p>
+<ul>
+<li><b>Hedged requests:</b> send a second copy to another server only if the first has been outstanding longer than the 95th-percentile latency. That limits the extra load to about 5% while substantially shortening the tail.<sup class="c"><a href="#s5">[5]</a></sup></li>
+<li><b>Tied requests:</b> enqueue on two servers and cancel the loser. In one real Google system this cut median latency by 16% and the 99.9th percentile by 40%.<sup class="c"><a href="#s5">[5]</a></sup></li>
+<li><b>Micro-partitioning</b> (many more partitions than servers), <b>selective replication</b> of hot items, <b>&ldquo;good enough&rdquo; partial results</b>, and <b>canary requests</b> to catch a poisonous request before it hits thousands of servers.<sup class="c"><a href="#s5">[5]</a></sup></li>
+</ul>
+<p>In the lab, hedging after p95 sends about 5% extra calls and rescues the common case enormously (look at the N = 100 median). It does <i>not</i> rescue everything: when both the original and the hedge are slow, the request is still slow, and at large N those double-slow events are common enough to show up at p99. If slowness is <b>correlated</b> (same node, same GC pause, same overloaded dependency), the hedge lands on the same trouble. That is Lesson 6&rsquo;s common-mode fault in latency clothing. Note also the cost side of hedging: extra calls are retries, so everything in Lesson 5 (idempotency, budgets) applies.</p>
+
+<h2>3. Coordinated omission</h2>
+<p>The last trap is in how latency is generated and recorded. Gil Tene named it <b>coordinated omission</b>. A load generator that waits for each reply before sending the next request silently stops sending during a stall, so it omits exactly the samples that would have been worst. In his worked example, each ~536 ms freeze at a 1 ms target interval leaves roughly 535 missing observations; he adds that omission is harmless only when it is random, and that this is a measurement-methodology problem in load testers, not a problem in the system under test.<sup class="c"><a href="#s6">[6]</a></sup> Load tools differ: some default to a closed workload model, others offer arrival-rate (open) models that send on schedule regardless of replies.<sup class="c"><a href="#s7">[7]</a></sup></p>
+<div class="widget" id="sim-co"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>The server and the freeze are identical in both rows. The closed-loop tool reports a p99 of well under a millisecond, because it records one slow request instead of the hundreds that real users would have issued during the freeze. An <i>open</i> workload (clients that do not slow down because your service is slow) is the realistic model for public APIs; a closed one is right only for genuinely closed systems such as a fixed worker pool draining a queue.<sup class="c"><a href="#s7">[7]</a></sup> Look for the same problem in <b>production</b> measurements taken only at the server: if your metrics start counting at request receipt, time spent waiting in an accept queue never appears.</p>
+
+<h2>4. A practical rulebook (my synthesis)</h2>
+<ol>
+<li>Report p50, p99 and p99.9 side by side, never the mean alone. Keep the mean only as a resource metric (total time spent serving) that sums correctly.</li>
+<li>Store histograms or sketches; never average percentiles.</li>
+<li>For a fan-out of N, compute the effective percentile as q<sup>N</sup>. Set per-call targets from the request-level target, not the other way around.</li>
+<li>Load-test with an open, constant-arrival-rate model, and compare against a scheduled send time.</li>
+<li>Be suspicious of low-traffic p99s: with few requests one slow call moves the number.</li>
+</ol>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0007"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"A service's mean latency is 80 ms but p99 is 2,400 ms. What does this suggest?",
+ "options":["A small share of requests is very slow","Nearly every single request takes about 80 ms","The p99 value must be a measurement error","Latency is normally distributed around the average value"],
+ "answer":0,"why":"A right-skewed distribution: most requests are fast and a few are extremely slow, so the mean lands in a place few requests actually occupy."},
+{"q":"Each of 100 backends is slow 1% of the time. What share of fan-out requests see at least one slow call?",
+ "options":["About 1%","About 10%","About 63%","About 99%"],
+ "answer":2,"why":"1 - 0.99^100 is about 63%, the figure from The Tail at Scale. Tail latency compounds across fan-out."},
+{"q":"Why is averaging per-host p99 values wrong?",
+ "options":["Percentiles are always measured in different units","Averages cannot be computed from latency data","Hosts never report percentiles at all today","That result is no p99 of anything"],
+ "answer":3,"why":"A percentile depends on the whole sorted distribution and cannot be recombined from finished percentiles. Merge histograms or sketches, then compute the percentile."},
+{"q":"A load generator waits for each reply before sending the next request. During a 500 ms server freeze, what happens to the measurements?",
+ "options":["It records every delayed request with correct latency","It omits the requests that would have waited","It automatically corrects using the scheduled send times","It doubles the latency of the stalled request"],
+ "answer":1,"why":"That is coordinated omission: the generator coordinates with the stall by not issuing the requests that would have been slow, making the tail look far better than users experienced."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: audit one dashboard (15 minutes)</b></summary>
+<p>Find a latency graph you rely on. Is it a mean, a percentile, or a histogram? If it shows a percentile aggregated across instances or time, can the system merge them correctly? Where does the timer start: at the client, the load balancer, or the application? Write down what could be hiding before the timer starts.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Google SRE book, ch. 4 &ldquo;Service Level Objectives&rdquo; (primary): latency as a key indicator and the use of proxies when the ideal measure is hard to obtain (I did not verify the chapter&rsquo;s text on distributions directly). <a href="https://sre.google/sre-book/service-level-objectives">sre.google</a></li>
+<li id="s2">Google Cloud blog, &ldquo;Building good SLOs&mdash;CRE life lessons&rdquo; (primary-adjacent): averages can hide outliers. <a href="https://cloud.google.com/blog/products/gcp/building-good-slos-cre-life-lessons/">cloud.google.com</a></li>
+<li id="s3">ClickHouse, &ldquo;Percentiles vs averages: why your latency dashboard lies&rdquo; (<i>secondary; vendor article</i>): percentile definition, why they cannot be averaged, mergeable histograms and sketches. <a href="https://clickhouse.com/resources/engineering/percentiles-vs-averages">clickhouse.com</a></li>
+<li id="s4">Jeffrey Dean and Luiz Andr&eacute; Barroso, &ldquo;The Tail at Scale&rdquo;, Communications of the ACM, 2013 (primary). <a href="https://research.google/pubs/pub40801/">research.google</a></li>
+<li id="s5">Adrian Colyer, &ldquo;The Tail at Scale&rdquo;, the morning paper (<i>secondary summary quoting the paper</i>): the 63% and 2,000-server figures, hedged and tied requests, canary requests, micro-partitions. I read this in full. <a href="https://blog.acolyer.org/2015/01/15/the-tail-at-scale/">blog.acolyer.org</a></li>
+<li id="s6">Gil Tene, &ldquo;Coordinated Omission&rdquo;, mechanical-sympathy mailing list, 2013 (primary): the definition, the ~535 missing observations example, and the statement that it is a load-tester methodology problem. <a href="https://groups.google.com/g/mechanical-sympathy/c/icNZJejUHfE">groups.google.com</a></li>
+<li id="s7">Zuplo, &ldquo;How Not to Load Test an API&rdquo; (<i>secondary</i>): closed vs open workload models, arrival-rate executors. <a href="https://zuplo.com/blog/how-not-to-load-test-an-api">zuplo.com</a></li>
+</ol>
+
+<div class="pager"><a href="0006-faults-errors-failures.html">&larr; Lesson 6: Faults, errors, failures</a><a href="0008-fan-out-on-write-or-read.html">Lesson 8: Fan-out on write or read &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-latency.js"></script>
+</body></html>

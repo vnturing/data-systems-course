@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Fan-out on write or on read · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 1 · Lesson 8</p>
+<h1>Fan-out on write or on read: describing load</h1>
+<p class="lede">A feed is a materialized view. Where you pay for building it, at write time or read time, is the whole design problem, and the answer is less obvious than the standard story suggests.</p>
+<div class="meta"><span>~45 min</span><span>1 interactive</span><span>4-question check</span><span>Builds on Lessons 5 to 7</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Describe a system&rsquo;s load with the few numbers that drive its design, derive the per-follower cost of pushing versus pulling, and explain why a delivery deadline, not total cost, is usually what forces a hybrid design.</div>
+
+<h2>1. Load parameters first</h2>
+<p>Before choosing an architecture, write down the handful of numbers that characterize the load for <i>your</i> system: requests per second, read-to-write ratio, objects touched per request, and, for anything shaped like a feed, how many recipients one write reaches. Two systems with the same request rate can need opposite designs if one has fan-out of 3 and the other of 3 million.</p>
+<p>The classic worked example is a social timeline with two operations: <b>post a tweet</b> and <b>read my home timeline</b>. In 2012, Twitter&rsquo;s Raffi Krikorian described their architecture in the QCon talk &ldquo;Timelines at Scale&rdquo;.<sup class="c"><a href="#s1">[1]</a></sup> A summary of that talk reports roughly 150 million active users and around 300K queries per second for timelines against only ~6,000 requests per second on the write side, and notes that accounts with huge follower lists were becoming a common case rather than an outlier.<sup class="c"><a href="#s2">[2]</a></sup> Treat those as dated, approximate figures: a commentator notes the 300K counts search timelines as well as home timelines,<sup class="c"><a href="#s3">[3]</a></sup> and retellings of the design quote other numbers (write rates anywhere from about 5,000 to 12,000 per second). This lesson therefore builds on the <i>mechanism</i> and uses no Twitter number as an input.</p>
+
+<h2>2. Two ways to build a timeline</h2>
+<ul>
+<li><b>Fan-out on read (pull).</b> Store each tweet once. When a user opens their timeline, fetch recent tweets from everyone they follow and merge. Writes are cheap; every read does work proportional to how many accounts you follow. A multi-way join on every read gets expensive fast.<sup class="c"><a href="#s5">[5]</a></sup></li>
+<li><b>Fan-out on write (push).</b> Keep a precomputed timeline per user. When someone posts, insert the tweet into every follower&rsquo;s timeline. Reads become a single lookup; the write does work proportional to follower count.<sup class="c"><a href="#s5">[5]</a></sup> Twitter&rsquo;s version, as summarized, put timelines in a large Redis cluster with each entry replicated across machines.<sup class="c"><a href="#s2">[2]</a></sup></li>
+</ul>
+<h3>The cost algebra</h3>
+<p>Count work per follower per day. Pushing costs <i>tweets per day &times; cost of one insert</i>. Pulling costs <i>timeline reads per day &times; cost of one merge</i>. <b>The follower count appears on both sides and cancels.</b> This is my derivation, and it surprises people: in total-work terms, whether a given account is cheaper to push or to pull does not depend on how many followers it has. It depends on the read-to-write ratio and the relative cost of an insert versus a merge. For most feeds reads vastly outnumber writes, which is why precomputing wins for ordinary accounts, but for an author who tweets rarely relative to how often their audience reads, pull can be cheaper in <i>work</i>.</p>
+<p>So why does every large feed system end up with a hybrid? Something other than total cost must be binding.</p>
+
+<h2>3. The binding constraint is the burst</h2>
+<p>A single tweet from an account with tens of millions of followers is tens of millions of inserts that must all land quickly. One retelling of the design says a celebrity tweet triggering tens of millions of fan-out writes backs up queues and spikes latency.<sup class="c"><a href="#s5">[5]</a></sup> A case-study write-up of the 2012 talk reports a target that followers see new tweets within about five seconds.<sup class="c"><a href="#s4">[4]</a></sup> (I treat both as secondary and use five seconds only as an illustrative deadline.) That turns the problem into two objectives: total work per day, and <b>the worst-case time to deliver one tweet</b> on the write path, which is the account&rsquo;s follower count divided by the fan-out throughput.</p>
+<div class="widget" id="sim-fanout"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>At the defaults, pure fan-out on write has the least total work</b> (tag &ldquo;least total work&rdquo;), yet it is infeasible: delivering one tweet from the largest account would take minutes against a five-second deadline. The cheapest <i>feasible</i> design is a hybrid, and the threshold is set by the deadline and the fan-out throughput, not by cost.</li>
+<li><b>Make merges cheap</b> or <b>reads rare</b>, and pure pull becomes both the cheapest and feasible. At the default 60 reads and 3 tweets per user per day the crossover is a merge cost of 0.05&times; (3 &divide; 60); drag the merge-cost slider below that, or leave it and drop reads to about 10. It is exactly the algebra above: pull wins when reads &times; merge cost drops below tweets &times; insert cost.</li>
+<li><b>Raise the insert throughput</b> and the chosen threshold climbs: a faster pipeline can afford to push to bigger accounts. Your delivery pipeline&rsquo;s capacity is a design input.</li>
+</ol>
+
+<h2>4. The hybrid in practice</h2>
+<p>Retellings describe the hybrid like this: ordinary accounts fan out on write; accounts above a follower threshold are not fanned out, and their recent tweets are merged into each reader&rsquo;s precomputed timeline at read time.<sup class="c"><a href="#s5">[5]</a></sup> The thresholds quoted vary widely between sources (from about ten thousand to a million followers), which is what you would expect if it is a tuned parameter, not a constant.<sup class="c"><a href="#s5">[5]</a></sup> Two consequences deserve design attention: a user who has been away has an empty or stale precomputed timeline and needs a rebuild on first read, and the read-time merge means celebrity tweets can appear a few seconds later than ordinary ones.<sup class="c"><a href="#s5">[5]</a></sup> Both are the price of bounding the worst case.</p>
+<h3>Beyond timelines</h3>
+<p>The same trade appears wherever you maintain a derived view of one write for many readers: notifications, activity feeds, search index updates, denormalized counters, per-tenant caches. In a Kafka pipeline the fan-out workers&rsquo; <i>consumer lag</i> is the delivery-time metric (Lesson 10 turns it into an SLI), and Lesson 4&rsquo;s safety/liveness framing tells you what to do when the pipeline falls behind. Lesson 9 shows why the workers must stay well below saturation.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0008"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"In the lab's defaults, why is pure fan-out on write rejected even though it has the least total work?",
+ "options":["Inserts always cost more than merges at every scale","One huge account's tweet misses the delivery deadline badly","Read-time merges become impossible once followers exceed one million","Timelines stored on write cannot be read by followers"],
+ "answer":1,"why":"Total work and worst-case delivery time are different objectives. A single enormous account makes one tweet's fan-out far exceed the deadline, so the deadline forces some accounts onto the read path."},
+{"q":"Per follower per day, push costs tweets times insert cost and pull costs reads times merge cost. When does pull win for every account?",
+ "options":["When the account has an unusually large audience of followers worldwide","When tweets are posted more often than anybody ever reads them","When the delivery deadline is longer than the median page read","When reads times merge cost is below tweets times insert cost"],
+ "answer":3,"why":"The follower count cancels from the comparison, so the condition is on the ratio of reads to writes and the relative cost of a merge versus an insert."},
+{"q":"What mainly determines the hybrid threshold in the lab?",
+ "options":["The delivery deadline and fan-out throughput","The total count of registered users","The read-to-tweet ratio and nothing else","The average follower count per user"],
+ "answer":0,"why":"The threshold is the largest account the write path can finish within the deadline at the available throughput. Cost decides push versus pull in general; the burst decides where to cut."},
+{"q":"Which problem does the read-time merge of celebrity tweets introduce?",
+ "options":["Ordinary tweets arrive minutes late for everyone","Timelines can no longer be cached anywhere","Celebrity tweets may appear later than others","Followers lose access to older tweets entirely"],
+ "answer":2,"why":"Merging at read time and fanning out on write take different paths, so tweets from the two groups can show up with different delays. That inconsistency is the price of bounding the worst-case write burst."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: write the load parameters for one of your systems (10 minutes)</b></summary>
+<p>For one feature that fans a write out to many readers, write: writes per second, reads per second, the average and the largest fan-out, and the delivery time you promise. Which of the four sliders in the lab corresponds to a number you could actually measure?</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Raffi Krikorian, &ldquo;Timelines at Scale&rdquo;, QCon San Francisco, November 2012 (primary; <i>video and slides; I did not watch it, only read retellings</i>). <a href="https://www.infoq.com/presentations/Twitter-Timeline-Scalability">infoq.com</a></li>
+<li id="s2">High Scalability, &ldquo;The Architecture Twitter Uses To Deal With 150M Active Users&rdquo; (<i>secondary gloss of the talk</i>): 2012 scale figures, Redis timelines, outlier accounts. <a href="https://highscalability.com/the-architecture-twitter-uses-to-deal-with-150m-active-users/">highscalability.com</a></li>
+<li id="s3">Commentary thread on that article (<i>secondary</i>): the 300K figure includes search timelines. <a href="https://snarfed.org/?p=7006">snarfed.org</a></li>
+<li id="s4">&ldquo;Twitter Case Study: How to Design the Home Timeline for Massive Scale&rdquo; (<i>secondary</i>): the five-second delivery target attributed to the QCon talk. <a href="https://learning-software-engineering.github.io/Topics/System_Design/Twitter_System_Design.html">learning-software-engineering.github.io</a></li>
+<li id="s5">Retellings of the pull, push and hybrid designs (<i>secondary</i>; they disagree on thresholds and rates): <a href="https://dev.to/gabrielanhaia/twitters-fanout-strategy-at-scale-the-trade-off-most-designs-miss-55oa">Anhaia</a> &middot; <a href="https://dev.to/ufraan/how-twitter-served-300000-timelines-per-second-43bp">ufraan</a> &middot; <a href="https://dev.to/turacthethinker/scale-wars-5-twitter-the-fan-out-pattern-and-the-architecture-behind-140-characters-bpg">Tura&ccedil;</a></li>
+<li>The cost algebra and the lab are this course&rsquo;s own model. Its parameters are illustrative, not measurements.</li>
+</ol>
+
+<div class="pager"><a href="0007-percentiles-and-the-tail.html">&larr; Lesson 7: Percentiles and the tail</a><a href="0009-queueing-and-the-cliff.html">Lesson 9: Queueing and the cliff &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-fanout.js"></script>
+</body></html>

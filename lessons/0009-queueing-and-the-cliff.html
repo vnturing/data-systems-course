@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Queueing and the cliff · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 1 · Lesson 9</p>
+<h1>Queueing and the cliff</h1>
+<p class="lede">Latency does not rise gently as a system fills up. It stays flat, bends, and then goes vertical, and the bend arrives much earlier than intuition says.</p>
+<div class="meta"><span>~45 min</span><span>2 interactives</span><span>4-question check</span><span>Builds on Lessons 5 and 7</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Estimate how latency grows with utilization, explain why variability makes it worse, size a pool or concurrency limit with Little&rsquo;s law, and say why a consumer that processes slightly less than it receives never catches up.</div>
+
+<h2>1. Where waiting comes from</h2>
+<p>A request that arrives at a busy server waits. The simplest useful model is a single server with random (Poisson) arrivals and random (exponential) service times: the M/M/1 queue. For it, the average time in the system is the service time divided by (1 &minus; &rho;), where &rho; is utilization, the fraction of time the server is busy.<sup class="c"><a href="#s1">[1]</a></sup> That one formula carries the lesson:</p>
+<table>
+<tr><th>Utilization &rho;</th><th>50%</th><th>80%</th><th>90%</th><th>95%</th><th>99%</th></tr>
+<tr><td>Mean response time (&times; service time)</td><td>2&times;</td><td>5&times;</td><td>10&times;</td><td>20&times;</td><td>100&times;</td></tr>
+</table>
+<p>Going from 50% to 90% busy does not make requests 80% slower; it makes them five times slower. And the mean understates it: for M/M/1 first-come-first-served the response time is exponentially distributed, so its p99 is about 4.6 times the mean (ln 100).<sup class="c"><a href="#s1">[1]</a></sup> This is the heart of why &ldquo;the CPU graph looks fine at 80%&rdquo; is not reassuring.</p>
+
+<h2>2. Watch it happen</h2>
+<p>The lab simulates 300,000 requests per row with Lindley&rsquo;s recursion (each request&rsquo;s wait is the previous wait plus the previous service time minus the gap between arrivals, floored at zero). The formula column lets you check the simulator against theory.</p>
+<div class="widget" id="sim-queue"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>The exponential row matches the textbook.</b> Mean response is about 2&times; at 50%, 5&times; at 80%, 10&times; at 90%. The course&rsquo;s tests check these numerically, so you are not taking the formula on faith.</li>
+<li><b>The tail leaves the mean behind.</b> Compare p99 with the mean as utilization rises; the gap widens. Percentiles (Lesson 7) are where saturation shows up first.</li>
+<li><b>Switch to the high-variance service times.</b> At the same utilization and the same <i>average</i> service time, waiting is several times worse. The general result (the Pollaczek&ndash;Khinchine formula for M/G/1 queues) scales waiting with (1 + SCV)/2, where SCV is the squared coefficient of variation of service time. A deterministic server waits half as long as an exponential one; a high-variance one far longer.<sup class="c"><a href="#s1">[1]</a></sup> The formula is standard; the lab&rsquo;s tests confirm it to within a few percent.</li>
+<li><b>Variance is a design target.</b> Long-tailed service times come from big requests sharing a worker with small ones (head-of-line blocking), lock contention, cache misses, GC pauses. Separating queues by request size, or breaking large work into smaller pieces, lowers the variance term as surely as adding capacity lowers &rho;.</li>
+<li><b>Near 99% the simulation itself is noisy.</b> Convergence slows dramatically near saturation. That is the same property that makes real systems at 99% unpredictable.</li>
+</ol>
+
+<h2>3. Little&rsquo;s law: sizing the pool</h2>
+<p>One more identity does a lot of work: in a stable system, the average number of requests in the system equals the arrival rate times the average time each spends there, L = &lambda;W. It needs no assumptions about the arrival or service distributions.<sup class="c"><a href="#s2">[2]</a></sup> That makes it the right tool for connection pools, thread pools, and concurrency limits.</p>
+<div class="widget" id="sim-little"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>At 500 requests per second and 40 ms each, about 20 are in flight at any moment. Now the dependency slows down fourfold. Your request <i>rate</i> has not changed, but you now need four times the concurrency, so any pool sized for the old number becomes the bottleneck and requests queue behind it. That is how a latency problem in one service turns into pool exhaustion in its callers.</p>
+
+<h2>4. Consequences for the rest of the course</h2>
+<ul>
+<li><b>Headroom is not waste.</b> A service planned to run at 90% pays 10&times; service time in the average case. Pick a target utilization from your latency SLO (Lesson 10), not from a desire to use the hardware.</li>
+<li><b>Retry storms are queueing failures.</b> A retrying client pushes arrival rate toward or past service rate (Lesson 5); once &rho; &ge; 1 there is no steady state at all.</li>
+<li><b>A backlog drains at the spare capacity.</b> If a Kafka consumer handles &mu; messages per second and producers send &lambda; &lt; &mu;, lag drains at &mu; &minus; &lambda; per second: backlog divided by the spare rate. At &lambda; &ge; &mu; it never drains. This is the same arithmetic as the 150-request backlog that took five ticks to clear in Lesson 11&rsquo;s lab.</li>
+<li><b>Queues hide in places you may not graph:</b> thread-pool queues, connection-pool waits, accept queues, broker partitions. Lesson 7&rsquo;s warning about measuring from the right starting point applies to each.</li>
+</ul>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0009"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"At 90% utilization, an M/M/1 queue's mean response time is about how many times the service time?",
+ "options":["About 2 times","About 5 times","About 20 times","About 10 times"],
+ "answer":3,"why":"Mean response is 1/(1 - rho) service times: 1/0.1 = 10. The cliff starts well before 100%."},
+{"q":"Two services have equal average service time and utilization. Which has the longer waits?",
+ "options":["The one with more variable service times","The one with perfectly uniform service times","Neither, since averages alone determine queueing delay","Whichever one has the shorter average response"],
+ "answer":0,"why":"Waiting scales with (1 + SCV)/2 in the Pollaczek-Khinchine result, so higher variability means longer queues at the same utilization."},
+{"q":"A service handles 800 requests per second at 25 ms average. How many requests are in flight?",
+ "options":["About 8","About 20","About 200","About 800"],
+ "answer":1,"why":"Little's law: L = 800 x 0.025 = 20 requests in flight on average."},
+{"q":"A Kafka consumer processes 900 messages per second while producers send 1,000. What happens to lag?",
+ "options":["It stays constant at the current level","It shrinks until the backlog disappears entirely","It grows without bound until load changes","It oscillates around a stable average value"],
+ "answer":2,"why":"Arrivals exceed service, so utilization is above 1 and the backlog grows by 100 messages per second indefinitely. Only a change in load or capacity stops it."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: find your real utilization (10 minutes)</b></summary>
+<p>Pick one service and find the utilization of its <i>bottleneck</i> resource at peak (thread pool, connection pool, CPU, partition throughput), not the host&rsquo;s average CPU. Using 1/(1 &minus; &rho;), what mean wait does that imply? If it is above 80%, where would the first queue form?</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Wikipedia, &ldquo;M/M/1 queue&rdquo; (<i>secondary</i>): mean response time, the response-time distribution; the M/G/1 variance result is the standard Pollaczek&ndash;Khinchine formula from any queueing text. <a href="https://en.wikipedia.org/wiki/M/M/1_queue">wikipedia.org</a>. This course&rsquo;s own simulator (<code>tools/test-queue.js</code>) numerically verifies the mean and p99 formulas used here to within a few percent.</li>
+<li id="s2">Kiril Latish, &ldquo;Average latency is lying to you: Little&rsquo;s law in production&rdquo; (<i>secondary, practitioner</i>): L = &lambda;W and pool sizing. <a href="https://dev.to/kirilllatish/average-latency-is-lying-to-you-littles-law-in-production-4jh1">dev.to</a>. Little&rsquo;s law itself is a standard theorem.</li>
+<li>Further reading (<i>not used for claims</i>): <a href="https://dzone.com/articles/queuing-theory-for-software-engineers">DZone, Queuing Theory for Software Engineers</a> &middot; <a href="https://third-bit.com/2026/06/01/nonlinearity/">Third Bit, Queue Nonlinearity</a>.</li>
+</ol>
+
+<div class="pager"><a href="0008-fan-out-on-write-or-read.html">&larr; Lesson 8: Fan-out on write or read</a><a href="0010-slis-slos-error-budgets.html">Lesson 10: SLIs, SLOs, error budgets &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-queue.js"></script>
+</body></html>

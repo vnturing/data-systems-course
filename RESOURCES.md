@@ -50,6 +50,26 @@ Verification status: entries below were located and checked via web search on 20
   Educator write-up of Alpern and Schneider 1985 with the finite-prefix characterization. Companion: [Northeastern slides](https://khoury.northeastern.edu/~stavros/10-safety-liveness.pdf). Original paper: Alpern and Schneider, "Defining Liveness", IPL 21(4), 1985, doi 10.1016/0020-0190(85)90056-0 (not fetched). Use for: Lesson 4, Module 9.
 - Secondary, used with labels in lessons: RisingWave on Debezium at-least-once ([link](https://risingwave.com/blog/cdc-exactly-once-semantics-debezium-risingwave)); The Main Thread on a Quarkus outbox ([link](https://www.the-main-thread.com/p/quarkus-checkout-outbox)); ActiveWizards on Kafka EOS ([link](https://activewizards.com/blog/kafka-exactly-once-semantics-guide/)); Manning liveBook Kafka concept pages; Conduktor Kafka docs on min.insync.replicas and unclean election; AxonOps broker config; NextPoint review of the Builders' Library article; Lumigo summary of the same.
 
+### Added 2026-11-10 (Module 1, Lessons 6 to 11)
+
+- [Paper: Basic Concepts and Taxonomy of Dependable and Secure Computing, Avizienis, Laprie, Randell, Landwehr, IEEE TDSC 2004](https://drum.lib.umd.edu/handle/1903/6459)
+  Primary. Fault/error/failure definitions and the four means. Verified via the abstract and open copies plus two sets of course slides (University of Pisa, MTU); the full text was not read end to end. Edinburgh copy: https://www.inf.ed.ac.uk/teaching/courses/seoc/2006_2007/resources/BasicConcepts.pdf. Use for: Lesson 6. The "failure of a component is a fault for the system using it" framing is my reading of the chain model; confirm in the paper's discussion of propagation.
+- [Paper: On Designing and Deploying Internet-Scale Services, James Hamilton, LISA '07](https://www.usenix.org/conference/lisa-07/designing-and-deploying-internet-scale-services)
+  Primary. PDF: https://pages.cs.wisc.edu/~remzi/Classes/739/Papers/hamilton07.pdf. Read via search excerpts and two summaries, not cover to cover. Only the section title "Graceful Degradation and Admission Control" was verified for that topic. Use for: Lessons 6 and 11, Module 12 operability material.
+- [Paper: The Tail at Scale, Dean and Barroso, CACM 2013](https://research.google/pubs/pub40801/)
+  Primary. All figures used in Lesson 7 (63%, 2,000-server example, hedged requests ~5% extra load, tied requests 16%/40%, canary requests, micro-partitions) were verified in Adrian Colyer's summary, which I fetched in full: https://blog.acolyer.org/2015/01/15/the-tail-at-scale/. Use for: Lesson 7.
+- [Post: Coordinated Omission, Gil Tene, mechanical-sympathy list, 2013](https://groups.google.com/g/mechanical-sympathy/c/icNZJejUHfE)
+  Primary. The ~535 missing observations example and "a measurement methodology problem in load testers". Talk: "How NOT to Measure Latency" (CO part starts ~33:50 per Tene). Use for: Lesson 7.
+- [Book chapter: Google SRE book, ch. 4 Service Level Objectives](https://sre.google/sre-book/service-level-objectives)
+  Primary. SLI/SLO/SLA definitions, few indicators, proxies verified directly. Statements about percentiles/distributions, error-budget release policy and "100x more" were verified only through secondary quotations (ClickHouse, Coding Blocks). Chapter 3 "Embracing Risk" not fetched. Use for: Lesson 10.
+- [Blog: Building good SLOs, CRE life lessons, Google Cloud, 2017](https://cloud.google.com/blog/products/gcp/building-good-slos-cre-life-lessons/)
+  Primary-adjacent. Two-threshold latency SLO table; slow requests counted as downtime. Use for: Lesson 10.
+- [Talk: Timelines at Scale, Raffi Krikorian, QCon SF 2012](https://www.infoq.com/presentations/Twitter-Timeline-Scalability)
+  Primary, **not watched**. Lesson 8 cites it only through secondary retellings (High Scalability, learning-software-engineering.github.io, dev.to articles), which disagree on write rates (about 5K to 12K/s) and hybrid thresholds (10K to 1M followers). No Twitter number is used as a model input. Watch the talk before making any factual claim about Twitter's design.
+- [Article: M/M/1 queue, Wikipedia](https://en.wikipedia.org/wiki/M/M/1_queue)
+  Secondary. Formulas for mean response. The p99 = ln(100)/(1-rho) result for FCFS and the Pollaczek-Khinchine M/G/1 formula are standard; this course verifies them numerically in `tools/test-queue.js` (they are not quoted from Wikipedia).
+- Secondary, used with labels: ClickHouse "Percentiles vs averages" and "SLO, SLI, SLA"; Zuplo on load-test workload models; Kiril Latish on Little's law; DZone and Third Bit queueing articles (further reading only); Murat Demirbas and Adrian Colyer summaries of Hamilton.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -67,7 +87,7 @@ Verification status: entries below were located and checked via web search on 20
 
 - MySQL-specific: replication and semi-sync docs, InnoDB isolation levels and MVCC, Group Replication, binlog/GTID, Debezium MySQL connector. (Learner runs MySQL.)
 - AWS-specific: RDS and Aurora failover behavior, MSK defaults and configuration, DynamoDB consistency and transactions, SQS standard queue docs, SDK retry modes and defaults per language.
-- Percentiles and queueing for Module 1: Dean and Barroso, The Tail at Scale; a queueing/Little's law reference; Google SRE book on SLOs.
+- Module 1 follow-ups: read the SRE book ch. 3 and the SRE Workbook's SLO and alerting chapters directly (multi-window burn-rate alerting); watch the Krikorian talk; read Hamilton's admission-control section; find a primary queueing text (e.g. a Kleinrock or Harchol-Balter chapter) to replace the Wikipedia citation; AWS CloudWatch percentile statistics and aggregation behavior (not verified).
 - Storage engines: need primary sources for LSM-trees, B-trees/WAL, column stores (LSM paper, Bigtable, a column-store paper, RocksDB/LevelDB docs).
 - Time and clocks: Lamport's "Time, Clocks..." paper, Spanner/TrueTime, fencing-token write-ups.
 - Transactions: Berenson et al. "A Critique of ANSI SQL Isolation Levels", Cahill SSI paper, Helland "Life beyond distributed transactions".

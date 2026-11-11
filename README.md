@@ -18,7 +18,7 @@ All links are relative, so it works under `https://<user>.github.io/<repo>/`.
 ```
 sh tools/check-all.sh       # runs every model test and the quiz lint
 ```
-Individual checks: `node tools/test-sim.js`, `test-dualwrite.js`, `test-detector.js`, `test-kafka.js`, `test-retry.js`, and `python3 tools/check-quiz.py` (equal option word counts, varied answer positions).
+Individual checks: `node tools/test-sim.js`, `test-dualwrite.js`, `test-detector.js`, `test-kafka.js`, `test-retry.js`, `test-redundancy.js`, `test-latency.js`, `test-fanout.js`, `test-queue.js`, `test-slo.js`, `test-admission.js`, and `python3 tools/check-quiz.py` (equal option word counts, varied answer positions).
 
 ## Layout
 - `index.html`, `syllabus.html`: entry points

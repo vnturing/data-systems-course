@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Operability and admission control · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 1 · Lesson 11</p>
+<h1>Operability and admission control</h1>
+<p class="lede">The cheapest incidents are the ones the design handles without a human. The last lesson of the module is about designing for that, and about one mechanism, refusing work, that most systems lack until the day they need it.</p>
+<div class="meta"><span>~45 min</span><span>1 interactive</span><span>4-question check</span><span>Closes Module 1</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Explain why most operational pain is decided at design time, apply the &ldquo;take down any server&rdquo; acid test to your own system, and explain from a model why a service that accepts every request can collapse completely under a surge and stay collapsed after it ends.</div>
+
+<h2>1. Operations problems are design problems</h2>
+<p>James Hamilton&rsquo;s LISA &rsquo;07 paper, drawn from running some of the largest services at MSN and Windows Live, opens with a claim worth taking seriously: the authors long believed that 80% of operations issues originate in design and development. When something fails, people look first to operations because that is where the failure took place, but most operations issues either have their genesis in design or are best solved there.<sup class="c"><a href="#s1">[1]</a></sup> The paper&rsquo;s abstract frames the payoff as the system-to-administrator ratio: as low as 2:1 for smaller, less automated services against ratios as high as 2,500:1 for highly automated ones.<sup class="c"><a href="#s1">[1]</a></sup> An <b>operations-friendly</b> service requires little human intervention and both detects and recovers from all but the most obscure failures without it.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>The recurring themes are summarized by others as three tenets: expect failures, keep things simple, automate everything.<sup class="c"><a href="#s2">[2]</a></sup> Two concrete ideas from the paper are worth carrying around:</p>
+<ul>
+<li><b>Design for failure.</b> Once a service has scaled beyond about 10,000 servers and 50,000 disks, failures occur multiple times a day, so a design in which any hardware failure needs immediate administrative action will not scale.<sup class="c"><a href="#s1">[1]</a></sup> This is Lesson 6&rsquo;s fault tolerance as an operational requirement.</li>
+<li><b>The acid test.</b> Is the operations team willing and able to bring down any server in the service at any time without first draining its workload?<sup class="c"><a href="#s1">[1]</a><a href="#s6">[6]</a></sup> If not, your failure paths are untested. Summaries of the paper note the related advice to hard-fail rather than shut down gracefully when testing, because rarely used failure paths do not work when they are needed.<sup class="c"><a href="#s6">[6]</a></sup></li>
+</ul>
+<p>The paper also covers release cycles (summaries stress shipping in small increments, rolling out gradually, and supporting version rollback; big-bang deployments are dangerous),<sup class="c"><a href="#s6">[6]</a></sup> dependency management, capacity planning, monitoring and alerting, and a section on <b>graceful degradation and admission control</b>.<sup class="c"><a href="#s1">[1]</a></sup> I only verified that last section&rsquo;s title, so the lab below is my own illustration of the idea, not a summary of Hamilton&rsquo;s text.</p>
+
+<h2>2. A service that serves the dead</h2>
+<p>Lesson 9 showed latency rising as a queue fills. Add one realistic detail and it gets worse: <b>clients give up</b>. A request answered after its client has timed out is wasted work. The server did everything right and nobody is listening. Now picture a first-come-first-served queue during a surge. Once the wait exceeds client patience, every request at the front of the line is already dead, and the server spends its whole capacity on them while fresh requests wait behind. Goodput falls to zero even though the server is at 100% utilization.</p>
+<p>In the lab a service has capacity 100 per tick and normally receives 70. A surge arrives from tick 20 to 50. Compare four policies:</p>
+<div class="widget" id="sim-admission"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice (at the default settings)</h3>
+<ol>
+<li><b>With no admission control, the first wasted work appears at tick 34</b>, once the oldest queued request has been waiting longer than clients will, and useful work then stays near zero until about tick 95. That is <b>45 ticks after the surge ended</b>. The surge lasted 30 ticks; the outage lasted about 60. The backlog is the memory of the surge, and it drains only at the spare capacity (30 per tick), the same arithmetic as Lesson 9.</li>
+<li><b>A bounded queue keeps serving at full capacity</b> throughout the surge and recovers immediately, at the price of turning excess requests away. Nothing it serves is wasted, and waiting stays short.</li>
+<li><b>Dropping expired requests at the head also preserves goodput</b>, without needing a limit, but accepted requests wait nearly the full patience window and the queue holds a lot of work. Combining both (last row) gets the benefits of each.</li>
+<li><b>Make clients more patient</b> and the damage shrinks, because less of the queue is dead on arrival; <b>raise the surge</b> and it grows. There is no setting where unbounded FIFO beats refusing early under overload.</li>
+<li>This toy deliberately omits retries. Add them (Lesson 5) and every rejected or timed-out request returns, which makes the unbounded queue strictly worse and makes <b>retry budgets and admission control two halves of one defense</b>: the server limits what it accepts; clients limit what they resend.</li>
+</ol>
+<p>Real systems implement this as bounded thread-pool and connection queues, request deadlines propagated across calls, concurrency limits, and load shedding at the edge. The details vary with your gateway, load balancer and broker; the point is that <i>somewhere</i> a decision must be made to refuse work early, because the alternative is to refuse it late, after paying for it. Check what your stack does at saturation before it is saturated.</p>
+
+<h2>3. Operability checklist (my synthesis)</h2>
+<ol>
+<li>Can any instance be killed at any time without ceremony? Have you done it recently on purpose?</li>
+<li>What happens at 2&times; normal load? Is there a bounded queue, a deadline, or a concurrency limit, and what does a client see when it is hit?</li>
+<li>Can every release be rolled back quickly, and is it rolled out gradually?</li>
+<li>Does every dependency have a timeout, a retry policy with a budget, and a decision about what to do when it is down (Lessons 5 and 10)?</li>
+<li>Do dashboards show the SLIs, not just resource graphs (Lesson 10)?</li>
+<li>Are the first three responses to each known failure scripted, not remembered?</li>
+</ol>
+<p>The title of this lesson in the original syllabus also promised <i>evolvability</i>. Safe change of schemas and protocols (rolling upgrades, forward and backward compatibility) is covered where it belongs, in Module 4.</p>
+
+<h2>4. Check yourself</h2>
+<div class="quiz" data-lesson-id="0011"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"In the lab, why does an unbounded FIFO queue keep failing after the surge ends?",
+ "options":["Clients retry harder once the surge is over","The server permanently loses some capacity after overload","It keeps serving requests whose clients already left","Rejected requests are replayed ahead of fresh ones"],
+ "answer":2,"why":"The backlog built during the surge is older than client patience, so the server spends its capacity on requests nobody is waiting for, until the backlog drains at the spare capacity."},
+{"q":"What does a bounded queue trade for protecting work served in time?",
+ "options":["Turning some excess requests away immediately","Longer waits for every accepted request","Lower server capacity during normal operation","Permanent loss of already queued requests"],
+ "answer":0,"why":"Refusing the excess early is the cost. Accepted requests wait less, and nothing served is wasted, so goodput stays at capacity."},
+{"q":"Hamilton's acid test for fault tolerance asks whether operators are willing and able to do what?",
+ "options":["Roll back any release within one hour","Page every engineer during every single deployment","Run the service without any monitoring tools","Bring down any server at any time"],
+ "answer":3,"why":"If any server can be taken down at any time without draining its work first, the failure paths are being exercised and the service is built to tolerate failure."},
+{"q":"According to Hamilton, most operations issues originate where?",
+ "options":["In hardware selection alone","In design and development","In customer communication plans","In datacenter power systems"],
+ "answer":1,"why":"The paper argues about 80% of operations issues start in design and development, or are best solved there, which is why operability has to be designed in."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: find your saturation behavior (20 minutes)</b></summary>
+<p>For one service, find out (from config, not memory) what happens when it receives twice its normal load: how deep can its queues grow, do requests carry deadlines, and does anything refuse work? If the honest answer is &ldquo;it queues until it falls over&rdquo;, you have found your most valuable improvement from this module.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">James Hamilton, &ldquo;On Designing and Deploying Internet-Scale Services&rdquo;, LISA &rsquo;07 (primary): the 80% claim, operations-friendly services, the 2:1 to 2,500:1 ratio, design for failure and the acid test, the section list including graceful degradation and admission control. <a href="https://pages.cs.wisc.edu/~remzi/Classes/739/Papers/hamilton07.pdf">PDF</a> &middot; <a href="https://static.usenix.org/event/lisa07/tech/full_papers/hamilton/hamilton_html/">USENIX HTML</a></li>
+<li id="s2">Adrian Colyer, &ldquo;On designing and deploying internet-scale services&rdquo;, the morning paper (<i>secondary summary</i>): the three tenets. <a href="https://blog.acolyer.org/2016/09/12/on-designing-and-deploying-internet-scale-services/">blog.acolyer.org</a></li>
+<li id="s6">Murat Demirbas, &ldquo;On designing and deploying Internet scale services&rdquo; (<i>secondary summary</i>): hard-fail testing, small increments, gradual rollout, rollback. <a href="https://muratbuffalo.blogspot.com/2011/05/on-designing-and-deploying-internet.html">muratbuffalo.blogspot.com</a></li>
+<li>The admission-control lab is this course&rsquo;s own model (<code>assets/sim-admission.js</code>, tested by <code>tools/test-admission.js</code>). It is illustrative and is not drawn from the paper&rsquo;s text.</li>
+</ol>
+
+<div class="pager"><a href="0010-slis-slos-error-budgets.html">&larr; Lesson 10: SLIs, SLOs, error budgets</a><a href="../reference/module-1-checklist.html">Module 1 checklist &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-admission.js"></script>
+</body></html>

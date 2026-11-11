@@ -10,7 +10,7 @@
 - Content must be original and source-grounded, not a reproduction of the book.
 
 ## Open questions for the learner (non-blocking; answer only if useful)
-- Which AWS data services matter most (RDS MySQL vs Aurora, MSK vs self-managed Kafka, DynamoDB, SQS/SNS/Kinesis)? Shapes later labs.
+- Resolved 2026-11-10: no preference among AWS data services. Keep labs vendor-neutral and mention AWS/MySQL/Kafka counterparts where verified.
 - Interested in a reading-group community or not? Recorded as undecided in RESOURCES.md.
 
 ## Design decisions
@@ -29,7 +29,15 @@
 - 0004 safety and liveness (Kafka partition lab, 8-config matrix with 3 disaster scenarios)
 - 0005 retries (herd lab and outage lab)
 - reference/module-0-checklist.html
+- 0006 faults, errors, failures (fault/error/failure drill; redundancy vs common-mode lab)
+- 0007 percentiles and the tail (percentile merging, fan-out + hedging, coordinated omission labs)
+- 0008 fan-out on write or read (two-objective model; found that follower count cancels in total-work terms)
+- 0009 queueing and the cliff (Lindley simulator validated against M/M/1 and Pollaczek-Khinchine; Little's law)
+- 0010 SLIs, SLOs, error budgets (budget/burn-rate calculator, dependency ceiling)
+- 0011 operability and admission control (fluid model: unbounded FIFO collapses and stays collapsed ~45 ticks after the surge)
+- reference/module-1-checklist.html
 
 ## Next up
-1. Module 1 (measuring systems): percentiles and tail latency, load parameters and fan-out, queueing, SLOs. Needs sources: Dean and Barroso "The Tail at Scale", Little's law/queueing reference, Google SRE book chapters on SLOs.
+1. Module 2 (data models and query languages): relational vs document, many-to-many, schema-on-read vs write, graph models, declarative vs imperative queries. Needs sources first: relational model and document-model papers or vendor docs (MySQL JSON, DynamoDB data modeling), property-graph/query-language references, optimizer docs.
 2. Fill the RESOURCES.md Gaps (storage engines, MySQL docs) before Module 3.
+3. Lessons learned this patch: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. Three times across the last two patches (jitter, Kafka disk loss, fan-out) the fix was a better experiment, not a tuned parameter.

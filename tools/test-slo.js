@@ -1,0 +1,22 @@
+global.window={}; global.document={addEventListener(){}};
+require('../assets/sim-slo.js'); const S=window.SloSim; let bad=0;
+function chk(n,c){if(!c){bad++;console.log('FAIL',n);}}
+const near=(a,b,e)=>Math.abs(a-b)<=e;
+chk('99% of 30 days = 432 min (7.2 h)',near(S.budgetMinutes(99,30),432,1e-6));
+chk('99.9% of 30 days = 43.2 min',near(S.budgetMinutes(99.9,30),43.2,1e-6));
+chk('99.99% of 30 days = 4.32 min',near(S.budgetMinutes(99.99,30),4.32,1e-6));
+chk('99.999% of 30 days = 25.92 s',near(S.budgetMinutes(99.999,30)*60,25.92,1e-6));
+chk('each extra nine cuts the budget 10x',near(S.budgetMinutes(99,30)/S.budgetMinutes(99.9,30),10,1e-9));
+chk('12 min full outage consumes 12 bad-minutes',near(S.consumed({minutes:12,errorRate:1}),12,1e-12));
+chk('90 min at 5% errors consumes 4.5 bad-minutes',near(S.consumed({minutes:90,errorRate:0.05}),4.5,1e-12));
+chk('100% errors vs 99.9% SLO burns at 1000x',near(S.burnRate(99.9,1),1000,1e-6));
+chk('...exhausting a 30-day budget in 43.2 minutes',near(S.hoursToExhaust(99.9,30,1)*60,43.2,1e-6));
+chk('5% errors vs 99.9% SLO burns at 50x, lasting 14.4 hours',near(S.burnRate(99.9,0.05),50,1e-9)&&near(S.hoursToExhaust(99.9,30,0.05),14.4,1e-9));
+const t=S.timeline(99.9,30,S.INCIDENTS);
+chk('presets total 57.5 bad-minutes',near(t.spent,57.5,1e-9));
+chk('99.9%: budget exhausted on day 23 (the fourth incident)',t.exhaustedDay===23);
+chk('99.5%: preset incidents never exhaust the budget',S.timeline(99.5,30,S.INCIDENTS).exhaustedDay===null);
+chk('remaining = budget - spent',near(t.remaining,43.2-57.5,1e-9));
+chk('three 99.9% dependencies => 99.7003%',near(S.composite([.999,.999,.999]),0.997002999,1e-9));
+chk('availability of a chain can never exceed its weakest link',S.composite([.999,.9999,.99])<=0.99);
+console.log(bad?bad+' failures':'slo model: 16 properties hold'); process.exit(bad?1:0);

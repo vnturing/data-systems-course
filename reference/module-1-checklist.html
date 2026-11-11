@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Module 1 checklist · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="module-0-checklist.html">Module 0 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Reference sheet · Module 1</p>
+<h1>Measuring systems: formulas and rules</h1>
+<p class="lede">The arithmetic and habits from Lessons 6 to 11 on one page. Print-friendly.</p>
+
+<h2>Vocabulary <small>(Lesson 6)</small></h2>
+<table>
+<tr><th>Term</th><th>Meaning</th></tr>
+<tr><td>Fault</td><td>Adjudged or hypothesized cause of an error (a bug, a bad config, a failed disk, a dependency's failure seen from your side)</td></tr>
+<tr><td>Error</td><td>Part of system state that may lead to a service failure; may be latent or detected; many never become failures</td></tr>
+<tr><td>Failure</td><td>Delivered service deviates from correct service (what the user sees)</td></tr>
+<tr><td>Fault tolerance</td><td>Error detection + recovery so faults do not become failures</td></tr>
+</table>
+<p><b>Redundancy (independent failures, each replica down with probability p):</b> 2 replicas either may serve: p&sup2;. 3 replicas any one may serve: p&sup3;. 2-of-3 majority: 3p&sup2; &minus; 2p&sup3;. <b>Any common-mode fault probability c is a floor:</b> unavailability &ge; c. Ask which replicas share a zone, deploy, codebase, credential or dependency.</p>
+
+<h2>Latency <small>(Lesson 7)</small></h2>
+<ul>
+<li>Report p50, p99, p99.9. Never the mean alone. <b>Never average percentiles</b>; store histograms or sketches and merge them.</li>
+<li>Fan-out of N calls, each slow with probability q: P(request slow) = 1 &minus; (1 &minus; q)<sup>N</sup>. (q = 1%, N = 100: 63%.)</li>
+<li>Hedged request: send a second copy after the single-call p95; extra load about 5%. Fixes the common slow call, not correlated slowness or double-slow events. Hedges are retries: idempotency applies.</li>
+<li>Load tests: open model (constant arrival rate), latency measured from the scheduled send time. A closed loop omits exactly the slow samples (coordinated omission).</li>
+</ul>
+
+<h2>Load and fan-out <small>(Lesson 8)</small></h2>
+<ul>
+<li>Write down: writes/s, reads/s, fan-out (average and maximum), delivery deadline.</li>
+<li>Per follower per day: push = tweets &times; insert cost; pull = reads &times; merge cost. <b>Follower count cancels.</b> Pull wins in total work when reads &times; merge cost &lt; tweets &times; insert cost.</li>
+<li>Hybrid threshold = largest account whose single write can finish in the deadline: followers &divide; fan-out throughput &le; deadline.</li>
+</ul>
+
+<h2>Queueing <small>(Lesson 9)</small></h2>
+<table>
+<tr><th>Utilization</th><th>50%</th><th>80%</th><th>90%</th><th>95%</th><th>99%</th></tr>
+<tr><td>M/M/1 mean response (&times; service time)</td><td>2</td><td>5</td><td>10</td><td>20</td><td>100</td></tr>
+</table>
+<ul>
+<li>M/M/1: mean response = s / (1 &minus; &rho;); p99 &asymp; 4.6 &times; mean. Queueing wait scales with (1 + SCV) / 2 (Pollaczek&ndash;Khinchine): reduce variance (separate queues by size, break up big work) as well as load.</li>
+<li><b>Little's law: L = &lambda; &times; W.</b> 500 req/s at 40 ms means about 20 in flight; if the dependency is 4&times; slower, you need 4&times; the concurrency.</li>
+<li>Backlog drain time = backlog / (&mu; &minus; &lambda;). If &lambda; &ge; &mu;, it never drains.</li>
+</ul>
+
+<h2>SLOs <small>(Lesson 10)</small></h2>
+<table>
+<tr><th>SLO</th><th>30-day error budget</th></tr>
+<tr><td>99%</td><td>7.2 hours</td></tr><tr><td>99.5%</td><td>3.6 hours</td></tr><tr><td>99.9%</td><td>43.2 minutes</td></tr>
+<tr><td>99.95%</td><td>21.6 minutes</td></tr><tr><td>99.99%</td><td>4.3 minutes</td></tr><tr><td>99.999%</td><td>26 seconds</td></tr>
+</table>
+<ul>
+<li>SLI = measurement; SLO = internal target; SLA = contract with consequences (usually looser than the SLO).</li>
+<li>Error budget = 1 &minus; SLO. Burn rate = observed error rate &divide; allowed error rate. 100% errors vs 99.9% = 1,000&times; (budget gone in 43 min). 5% errors = 50&times; (14.4 h).</li>
+<li>Serial hard dependencies multiply: five at 99.9% = 99.5%. Make some optional or redundant; assume independence only after checking.</li>
+<li>Latency SLI as a threshold count: &ldquo;99% of requests under 300 ms&rdquo; = p99 &le; 300 ms.</li>
+</ul>
+
+<h2>Operability and admission control <small>(Lesson 11)</small></h2>
+<ul>
+<li>Acid test: can operators take down any server at any time without draining it first?</li>
+<li>Under overload, FIFO + impatient clients = the server works on requests nobody is waiting for; goodput collapses and the collapse outlasts the surge.</li>
+<li>Defenses: bounded queues, request deadlines (drop the expired), concurrency limits, shedding at the edge; clients limit retries with budgets (Lesson 5).</li>
+<li>Check what each component does at 2&times; load <i>before</i> it happens.</li>
+</ul>
+
+<h2>Sources</h2>
+<p>See the sources list at the end of Lessons <a href="../lessons/0006-faults-errors-failures.html">6</a>, <a href="../lessons/0007-percentiles-and-the-tail.html">7</a>, <a href="../lessons/0008-fan-out-on-write-or-read.html">8</a>, <a href="../lessons/0009-queueing-and-the-cliff.html">9</a>, <a href="../lessons/0010-slis-slos-error-budgets.html">10</a> and <a href="../lessons/0011-operability-and-admission-control.html">11</a>. Secondary sources are labeled there.</p>
+<div class="pager"><a href="../index.html">&larr; Course home</a><a href="../syllabus.html">Syllabus &rarr;</a></div>
+</main></body></html>

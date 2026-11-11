@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Faults, errors, failures · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 1 · Lesson 6</p>
+<h1>Faults, errors, failures, and what redundancy can and cannot do</h1>
+<p class="lede">Three words that engineers use interchangeably have three different meanings, and the difference tells you where to put your defenses.</p>
+<div class="meta"><span>~40 min</span><span>2 interactives</span><span>4-question check</span><span>Builds on Lessons 2 to 4</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Describe an incident as a chain of fault, error and failure instead of a single &ldquo;root cause&rdquo;, say where in the chain a given defense acts, and explain from a formula why replicas in the same fault domain do not buy the availability they appear to.</div>
+
+<h2>1. Three words, three meanings</h2>
+<p>The standard vocabulary comes from the dependability literature, in a taxonomy paper by Avizienis, Laprie, Randell and Landwehr that is open-access and worth skimming.<sup class="c"><a href="#s1">[1]</a></sup> In it:</p>
+<ul>
+<li>A <b>fault</b> is the adjudged or hypothesized <i>cause</i> of an error.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li>An <b>error</b> is the part of the system&rsquo;s state that <i>may lead to</i> a subsequent service failure.<sup class="c"><a href="#s2">[2]</a></sup> Errors can be detected or latent.<sup class="c"><a href="#s3">[3]</a></sup></li>
+<li>A <b>failure</b> is the delivered service deviating from correct service: the thing the user sees.<sup class="c"><a href="#s1">[1]</a></sup></li>
+</ul>
+<p>The chain is: a fault creates an error in internal state, and the error may or may not reach the service&rsquo;s external behavior and become a failure. The point worth tattooing on a runbook: <b>many errors never become failures</b>.<sup class="c"><a href="#s2">[2]</a></sup> Faults can be permanent (a burned-out chip) or transient (a one-off glitch).<sup class="c"><a href="#s2">[2]</a></sup></p>
+<p>Whether a given event is a fault or a failure depends on where you draw the boundary. A payment provider returning errors is a <i>failure</i> of the provider&rsquo;s service but a <i>fault</i> from your service&rsquo;s point of view: a possible cause of errors inside your system. (That boundary-relative reading is my explanation of the chain model; check the paper&rsquo;s discussion of how failures propagate.)</p>
+
+<div class="widget" id="sim-drill"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h2>2. Why the distinction pays for itself</h2>
+<p>&ldquo;Root cause: the config typo&rdquo; is the answer to only one question: <i>where did the chain start?</i> It says nothing about why an error was able to reach the customer. Each link has its own defenses, which the taxonomy groups into four means:<sup class="c"><a href="#s1">[1]</a><a href="#s3">[3]</a></sup> fault <b>prevention</b>, fault <b>tolerance</b>, fault <b>removal</b>, and fault <b>forecasting</b>. Fault tolerance in particular is failure avoidance by error detection and system recovery.<sup class="c"><a href="#s3">[3]</a></sup></p>
+<table>
+<tr><th>Means</th><th>Acts on</th><th>Examples in a MySQL / Kafka / AWS shop (my mapping)</th></tr>
+<tr><td>Prevention</td><td>Stops the fault from being introduced</td><td>Code review, schema constraints, typed config, least-privilege IAM</td></tr>
+<tr><td>Removal</td><td>Finds and fixes faults before or after release</td><td>Tests, canary deploys, post-incident fixes</td></tr>
+<tr><td>Tolerance</td><td>Detects the error and recovers before it becomes a failure</td><td>Retries with backoff (Lesson 5), replicas, failover, idempotency (Lesson 1)</td></tr>
+<tr><td>Forecasting</td><td>Estimates faults and their consequences</td><td>Load tests, capacity planning, game days</td></tr>
+</table>
+<p>At scale this stops being optional. One practitioner paper puts a number on it: once a service has grown past roughly 10,000 servers and 50,000 disks, failures occur multiple times a day, and a design that needs immediate human action for each one cannot scale.<sup class="c"><a href="#s4">[4]</a></sup> Lesson 11 returns to that paper.</p>
+
+<h2>3. What redundancy can and cannot do</h2>
+<p>The most common tolerance technique is replication. The arithmetic is easy, and it hides a trap. Suppose each replica is independently down a fraction <i>p</i> of the time. Then (assuming instant, perfect failover):</p>
+<ul>
+<li>one replica: unavailability <i>p</i></li>
+<li>two replicas, either may serve: <i>p</i><sup>2</sup></li>
+<li>three replicas, any one may serve: <i>p</i><sup>3</sup></li>
+<li>three replicas, a majority must be up (2 of 3): 3<i>p</i><sup>2</sup> &minus; 2<i>p</i><sup>3</sup></li>
+</ul>
+<p>With <i>p</i> = 1%, a 2-of-3 majority is unavailable about 0.03% of the time instead of 1%: thirty-three times better. Those formulas assume the replicas fail <b>independently</b>. The trap is that many faults are <b>common-mode</b>: a bad deploy that ships to all replicas, a bug present in every copy, two replicas in the same availability zone or on the same host, a shared dependency like DNS or a certificate. Model that as a probability <i>c</i> that everything fails at once, and every design is stuck at a floor of <i>c</i>, no matter how many replicas you add.</p>
+
+<div class="widget" id="sim-redundancy"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>What to notice</h3>
+<ol>
+<li>At <i>c</i> = 0, going from one replica to three transforms the numbers. Replication works, on paper.</li>
+<li>Raise <i>c</i> to even 0.05% and the gap between a single replica and three collapses toward the floor. <b>The best replication cannot beat your largest shared fault.</b></li>
+<li>This is why placement matters more than count. Which of your replicas share a zone, a deploy pipeline, a codebase, a credential, a data store? Each sharing relationship is a path for a common-mode fault. (Which layers of AWS infrastructure share fate is a question for your provider&rsquo;s documentation; the model only tells you to ask it.)</li>
+<li>It also revisits Lesson 3: &ldquo;replicas fail independently&rdquo; is itself a model assumption, and one worth writing down.</li>
+</ol>
+
+<h2>4. Check yourself</h2>
+<div class="quiz" data-lesson-id="0006"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"A replica holds stale data that nothing has read yet. Which term fits?",
+ "options":["A service failure already visible to users","A latent error, not yet a failure","A fault that has already been removed","A transient fault producing no error state"],
+ "answer":1,"why":"Wrong state that has not reached the service interface is a latent error. It becomes a failure only if it propagates to what users see."},
+{"q":"Why does adding a third replica in the same zone stop improving availability?",
+ "options":["Replicas inside a single zone cannot exchange data","Majority voting is defined for exactly two replicas","Network latency grows with every additional replica added","A common-mode fault takes all replicas out together"],
+ "answer":3,"why":"Replication only protects against independent faults. A zone-wide fault is shared by every replica in it, so it sets a floor on unavailability."},
+{"q":"A payment provider fails for two minutes. From your service's viewpoint, that failure is a:",
+ "options":["Fault that may cause errors","Failure of your own service","Latent error in your database","Fault eliminated by fault prevention"],
+ "answer":0,"why":"Failure of a component you depend on is a fault relative to your system: a possible cause of errors inside it. Your retries and fallbacks decide whether it becomes your failure."},
+{"q":"Three independent replicas are each down 1% of the time and a majority must be up. Unavailability is roughly:",
+ "options":["About 0.0001%","About 0.03%","About 1%","About 3%"],
+ "answer":1,"why":"3p^2 - 2p^3 with p = 0.01 is 0.000298, about 0.03%. That assumes independence; a common-mode fault would put a floor under it."}
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: redraw one incident as a chain (10 minutes)</b></summary>
+<p>Take a recent incident writeup and rewrite its timeline as fault, error, failure. Then ask for each link: which defense did we have here, and did it act? You will usually find one link that had none.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Avizienis, Laprie, Randell, Landwehr, &ldquo;Basic Concepts and Taxonomy of Dependable and Secure Computing&rdquo;, IEEE TDSC 1(1), 2004, pp. 11&ndash;33 (primary; doi 10.1016/TDSC.2004.2). Open copies: <a href="https://drum.lib.umd.edu/handle/1903/6459">UMD DRUM</a> &middot; <a href="https://www.inf.ed.ac.uk/teaching/courses/seoc/2006_2007/resources/BasicConcepts.pdf">Edinburgh copy</a>. I verified the abstract and definitions through these copies and course slides; read the paper for the full taxonomy.</li>
+<li id="s2">University of Pisa course slides summarizing the paper (<i>secondary</i>): fault, error, failure definitions, the chain, transient vs permanent faults. <a href="https://docenti.ing.unipi.it/~a008669/didattica/ANNO2016-17/DependableSystems/BasicConcepts-P1.pdf">PDF</a></li>
+<li id="s3">MTU CS5090 slides on the taxonomy (<i>secondary</i>): detected/latent errors, the four means, fault tolerance as error detection and recovery. <a href="https://pages.mtu.edu/~aebnenas/teaching/fall2010/cs5090/present/Shawn/taxonomy.pdf">PDF</a></li>
+<li id="s4">James Hamilton, &ldquo;On Designing and Deploying Internet-Scale Services&rdquo;, LISA &rsquo;07 (primary). Failures occur multiple times a day beyond ~10,000 servers and 50,000 disks. <a href="https://pages.cs.wisc.edu/~remzi/Classes/739/Papers/hamilton07.pdf">PDF</a> &middot; <a href="https://www.usenix.org/conference/lisa-07/designing-and-deploying-internet-scale-services">USENIX page</a></li>
+</ol>
+
+<div class="pager"><a href="0005-retries-backoff-and-jitter.html">&larr; Lesson 5: Retries done right</a><a href="0007-percentiles-and-the-tail.html">Lesson 7: Percentiles and the tail &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-redundancy.js"></script>
+</body></html>

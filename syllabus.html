@@ -23,13 +23,14 @@
 
 <div class="module"><div class="part">Part I · Foundations on one machine</div><h3>Module 1 · Measuring systems: reliability, scalability, maintainability</h3>
 <ol start="6">
-<li class="status-planned">Faults vs failures; designing for fault tolerance</li>
-<li class="status-planned">Percentiles, tail latency and why averages lie <span class="why">&mdash; build a latency dashboard that tells the truth</span></li>
-<li class="status-planned">Describing load: fan-out on write vs on read (the timeline problem)</li>
-<li class="status-planned">Queueing, utilization and why systems fall off a cliff at 80% load</li>
-<li class="status-planned">SLIs, SLOs and error budgets <span class="why">&mdash; turn "reliable" into a number you can manage</span></li>
-<li class="status-planned">Operability and evolvability: the costs after launch</li>
-</ol></div>
+<li data-lesson-id="0006"><a href="lessons/0006-faults-errors-failures.html">Faults, errors, failures, and what redundancy can and cannot do</a> <span class="status-built">built</span> <span class="why">&mdash; describe incidents as chains; see why replicas in one fault domain stop helping</span></li>
+<li data-lesson-id="0007"><a href="lessons/0007-percentiles-and-the-tail.html">Percentiles, the tail, and how to measure latency honestly</a> <span class="status-built">built</span> <span class="why">&mdash; fan-out arithmetic, hedged requests, never average percentiles, coordinated omission</span></li>
+<li data-lesson-id="0008"><a href="lessons/0008-fan-out-on-write-or-read.html">Fan-out on write or on read: describing load</a> <span class="status-built">built</span> <span class="why">&mdash; why the delivery deadline, not total cost, forces the hybrid</span></li>
+<li data-lesson-id="0009"><a href="lessons/0009-queueing-and-the-cliff.html">Queueing and the cliff</a> <span class="status-built">built</span> <span class="why">&mdash; 1/(1-utilization), variance, Little's law, why lag never drains</span></li>
+<li data-lesson-id="0010"><a href="lessons/0010-slis-slos-error-budgets.html">SLIs, SLOs and error budgets</a> <span class="status-built">built</span> <span class="why">&mdash; budgets, burn rate, dependency ceilings</span></li>
+<li data-lesson-id="0011"><a href="lessons/0011-operability-and-admission-control.html">Operability and admission control</a> <span class="status-built">built</span> <span class="why">&mdash; refuse work early or collapse late (evolvability moves to Module 4)</span></li>
+</ol>
+<p style="font-family:var(--sans);font-size:.82rem;margin:.6rem 0 0"><a href="reference/module-1-checklist.html">Module 1 formulas and rules</a></p></div>
 
 <div class="module"><div class="part">Part I</div><h3>Module 2 · Data models and query languages</h3>
 <ol start="12">
