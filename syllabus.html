@@ -34,13 +34,14 @@
 
 <div class="module"><div class="part">Part I</div><h3>Module 2 · Data models and query languages</h3>
 <ol start="12">
-<li class="status-planned">Relational vs document: locality, joins and the impedance mismatch</li>
-<li class="status-planned">Many-to-many and why documents drift toward relations</li>
-<li class="status-planned">Schema-on-read vs schema-on-write <span class="why">&mdash; choose consciously, not by default</span></li>
-<li class="status-planned">Graph models: property graphs and triple stores</li>
-<li class="status-planned">Declarative vs imperative queries (and why optimizers can only help one of them)</li>
-<li class="status-planned">Lab: model one real workload three ways and compare</li>
-</ol></div>
+<li data-lesson-id="0012"><a href="lessons/0012-relational-or-document.html">Relational or document? Locality, joins, and what you give up</a> <span class="status-built">built</span> <span class="why">&mdash; measured 13 reads vs 1, and 1 row vs 400 documents</span></li>
+<li data-lesson-id="0013"><a href="lessons/0013-many-to-many.html">Many-to-many, and why documents drift toward relations</a> <span class="status-built">built</span> <span class="why">&mdash; torn states, junction tables, the drift sequence</span></li>
+<li data-lesson-id="0014"><a href="lessons/0014-schema-on-read-and-write.html">Schema on read or schema on write</a> <span class="status-built">built</span> <span class="why">&mdash; the schema you did not write is still there</span></li>
+<li data-lesson-id="0015"><a href="lessons/0015-graph-models.html">Graph models: when the relationships are the data</a> <span class="status-built">built</span> <span class="why">&mdash; recursive CTEs, the UNION DISTINCT trap, hop arithmetic</span></li>
+<li data-lesson-id="0016"><a href="lessons/0016-declarative-queries-and-optimizers.html">Declarative vs imperative: what the optimizer does for you</a> <span class="status-built">built</span> <span class="why">&mdash; same SQL, a 42x spread; reading EXPLAIN ANALYZE</span></li>
+<li data-lesson-id="0017"><a href="lessons/0017-lab-model-one-workload.html">Lab: model one workload three ways</a> <span class="status-built">built</span> <span class="why">&mdash; the workload picks the layout</span></li>
+</ol>
+<p style="font-family:var(--sans);font-size:.82rem;margin:.6rem 0 0"><a href="reference/module-2-checklist.html">Module 2 rules and measured numbers</a> &middot; <a href="experiments/mysql/README.md">MySQL experiments</a></p></div>
 
 <div class="module"><div class="part">Part I</div><h3>Module 3 · Storage engines and indexes</h3>
 <ol start="18">

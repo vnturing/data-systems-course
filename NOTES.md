@@ -36,8 +36,18 @@
 - 0010 SLIs, SLOs, error budgets (budget/burn-rate calculator, dependency ceiling)
 - 0011 operability and admission control (fluid model: unbounded FIFO collapses and stays collapsed ~45 ticks after the surge)
 - reference/module-1-checklist.html
+- 0012 relational or document (layout lab calibrated on real MySQL: 13 reads vs 1, 1 row vs 400 docs, 401 vs 20,003 reads)
+- 0013 many-to-many (articles/tags lab, drift sequence)
+- 0014 schema on read or write (three readers lab; JSON_SCHEMA_VALID verified, error 3819)
+- 0015 graph models (traversal model cross-checked exactly against MySQL recursive CTEs; UNION DISTINCT + counter gotcha, error 3636)
+- 0016 declarative vs imperative (toy planner calibrated against five MySQL configurations; 42x spread; near-tie plan flipping; estimate 3,896 vs actual 20,000)
+- 0017 lab: model one workload three ways (workbook over the layout model)
+- reference/module-2-checklist.html; experiments/mysql/ (reproduction scripts + verify_lesson_sql.py)
+
+## Environment note
+A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Keep doing this for Module 3 (InnoDB internals, B-tree vs LSM questions can be probed with status counters).
 
 ## Next up
-1. Module 2 (data models and query languages): relational vs document, many-to-many, schema-on-read vs write, graph models, declarative vs imperative queries. Needs sources first: relational model and document-model papers or vendor docs (MySQL JSON, DynamoDB data modeling), property-graph/query-language references, optimizer docs.
-2. Fill the RESOURCES.md Gaps (storage engines, MySQL docs) before Module 3.
+1. Module 3 (storage engines and indexes): append-only log + hash index, memtables/SSTables/LSM, compaction and amplification, B-trees and the WAL, B-tree vs LSM, secondary/covering/composite indexes, in-memory databases, OLTP vs OLAP, column stores, materialized views. Sources first: O'Neil et al. LSM-tree paper, Bigtable paper, RocksDB and LevelDB docs, the MySQL manual's InnoDB architecture and indexing chapters, a column-store paper (C-Store or the Abadi et al. survey). Probe InnoDB on the real server (page reads, buffer pool and redo counters).
+2. Fill the RESOURCES.md Gaps before writing.
 3. Lessons learned this patch: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. Three times across the last two patches (jitter, Kafka disk loss, fan-out) the fix was a better experiment, not a tuned parameter.

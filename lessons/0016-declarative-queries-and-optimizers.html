@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Declarative vs imperative · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 2 · Lesson 16</p>
+<h1>Declarative vs imperative: what the optimizer does for you</h1>
+<p class="lede">SQL says what you want, not how to get it. The &ldquo;how&rdquo; is a program written by someone else, and it is worth knowing when it is brilliant and when it is guessing.</p>
+<div class="meta"><span>~50 min</span><span>1 interactive</span><span>real MySQL measurements</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Explain why declarative queries give an optimizer room to change plans, read a MySQL plan and compare estimated with actual rows, and recognize when a hard-coded access path (an ORM loop, an application-side join, a forced join order) gives that freedom away.</div>
+
+<h2>1. Declarative means someone else chooses the plan</h2>
+<p>An <b>imperative</b> program states steps: loop over orders, look up each customer, filter by region. A <b>declarative</b> query states properties of the result: orders that are open, whose customer is in the EU. The first fixes the access path. The second leaves it open.</p>
+<p>That openness is the heart of Codd&rsquo;s original argument. He wanted users and programs insulated from ordering, indexing and access-path dependence (Lesson 12), so that storage could change without breaking programs.<sup class="c"><a href="#s1">[1]</a></sup> The mechanism that makes it practical is the cost-based optimizer from IBM&rsquo;s System R: Selinger and colleagues described how the user specifies neither the access path nor the join order, and the system chooses, estimating the total access cost of candidate plans from statistics and searching join orders with dynamic programming restricted to left-deep plans.<sup class="c"><a href="#s2">[2]</a></sup> Modern engines are far more elaborate, but the contract is unchanged.</p>
+
+<h2>2. Same SQL, different plan</h2>
+<p>To feel it, take one query and change only the indexes. The lab below is a small cost model I calibrated against measurements on a real MySQL 8.0.46 server with a scaled-down dataset: 1,000,000 orders, 100,000 customers, 50 regions, 2% of orders open. The model counts storage-engine rows read, charging each join step the cheaper of an index lookup or a hash join, as the real engine does.</p>
+<div class="widget" id="sim-planner"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What the real optimizer did (the lower table)</h3>
+<ol>
+<li><b>No index on <code>orders.status</code> (B).</b> The optimizer started from the 50-row regions table and walked outward to customers and orders: <b>24,054 rows read</b> in all six statistics refreshes. Forcing the order as written (orders first) with <code>STRAIGHT_JOIN</code> read <b>1,020,004</b>. Same SQL, <b>42&times;</b> apart. A program that hard-codes &ldquo;orders, then customers, then regions&rdquo; pays that every time.</li>
+<li><b>Other configurations (C, D, E).</b> The optimizer chose orders-first in all six refreshes, and the as-written order matched it. When the index you remove is not on the winning path, the winning path does not change.</li>
+<li><b>All indexes present (A) is a near tie.</b> Across six statistics refreshes the optimizer chose regions-first twice (24,054 reads) and orders-first four times (40,002 reads). The two plans&rsquo; estimated costs were within a few percent of each other. The flips happened only when I re-ran <code>ANALYZE TABLE</code>, which re-samples statistics (my inference about the cause). In production, a plan that flips between a quick plan and a slower one when statistics refresh is a real operational phenomenon.</li>
+<li><b>The toy agrees with MySQL.</b> It reproduces the as-written read counts to within 0.1% and the alternative plan to within 9%, and it picks the same join order as MySQL in B through E. Its tests pin these numbers (<code>tools/test-planner.js</code>).</li>
+</ol>
+
+<h2>3. Reading a MySQL plan</h2>
+<p>MySQL&rsquo;s <code>EXPLAIN</code> can print a tree (<code>FORMAT=TREE</code>), and <code>EXPLAIN ANALYZE</code>, available since 8.0.18, actually runs the query and reports measured time, rows and loop counts beside the estimates.<sup class="c"><a href="#s3">[3]</a></sup> The manual also notes that hash joins are used by default since 8.0.18, which is one reason a join into a tiny table costs so little in the lab.<sup class="c"><a href="#s4">[4]</a></sup> The habit to build is comparing <b>estimated rows with actual rows</b> at each node.</p>
+<pre><code class="sql" data-sql="L16">CREATE TABLE regions   (id INT PRIMARY KEY, name VARCHAR(20) NOT NULL);
+CREATE TABLE customers (id INT PRIMARY KEY, region_id INT NOT NULL, KEY idx_region (region_id));
+CREATE TABLE orders    (id INT PRIMARY KEY, customer_id INT NOT NULL, status VARCHAR(10) NOT NULL,
+                        KEY idx_status (status), KEY idx_customer (customer_id));
+
+-- Declarative: say WHAT you want. The optimizer picks the join order and the access paths.
+EXPLAIN FORMAT=TREE
+SELECT COUNT(*) FROM orders o
+  JOIN customers c ON c.id = o.customer_id
+  JOIN regions r   ON r.id = c.region_id
+WHERE r.name = 'EU' AND o.status = 'open';
+
+-- EXPLAIN ANALYZE runs it and shows estimated vs actual rows, time and loops per node.
+EXPLAIN ANALYZE
+SELECT COUNT(*) FROM orders o
+  JOIN customers c ON c.id = o.customer_id
+  JOIN regions r   ON r.id = c.region_id
+WHERE r.name = 'EU' AND o.status = 'open';
+
+-- An imperative override: STRAIGHT_JOIN joins the tables in exactly the order written.
+SELECT COUNT(*) FROM orders o
+  STRAIGHT_JOIN customers c ON c.id = o.customer_id
+  STRAIGHT_JOIN regions r   ON r.id = c.region_id
+WHERE r.name = 'EU' AND o.status = 'open';
+
+-- Refresh the statistics the optimizer's estimates come from.
+ANALYZE TABLE orders, customers, regions;</code></pre>
+<div class="callout"><b class="t">An estimate that was wrong, and why</b>
+In the measured dataset, <code>EXPLAIN ANALYZE</code> showed the join producing an <b>actual 20,000 rows where the optimizer estimated 3,896</b>. My synthetic data accidentally made every open order belong to an EU customer. The optimizer assumes the two filters are independent (as does my toy), so it multiplied selectivities and under-estimated. Real data is correlated like this constantly (country and currency, status and date). When estimated and actual rows diverge by a large factor at some node, suspect correlation or stale statistics before suspecting the algorithm.</div>
+
+<h2>4. What declarative buys, and what it costs</h2>
+<table>
+<tr><th>You gain</th><th>You pay</th></tr>
+<tr><td><b>Plans adapt without code changes.</b> Add an index and existing queries can use it (the 42&times; case). New join algorithms (hash join arrived in 8.0.18) can speed up old queries.</td><td><b>You do not control the plan.</b> A change in statistics or version can change it, and the new plan may be slower.</td></tr>
+<tr><td><b>Data independence.</b> You can reorganize storage without rewriting every program.</td><td><b>Plans can be unstable near ties</b>, as configuration A showed.</td></tr>
+<tr><td>The query is shorter and states intent.</td><td><b>Estimates can be wrong</b> (correlated predicates), and wrong estimates produce wrong plans.</td></tr>
+</table>
+<p>The escape hatches (hints, <code>STRAIGHT_JOIN</code>) make the plan imperative again. That is sometimes the right call for a critical query, but it freezes the plan: in configuration B the forced order was 42&times; worse, and it would stay that way if the data changed.</p>
+<h3>When you are the optimizer</h3>
+<p>Document and key-value stores tend to move this decision to you. DynamoDB&rsquo;s guidance has you identify your access patterns first and design keys around them, because there is no join planner to rescue a model that was designed without them.<sup class="c"><a href="#s5">[5]</a></sup> The same is true of an ORM loop that issues one query per row, or an application-side join in Lesson 13&rsquo;s drift story: each hard-codes a plan, and each is only as good as the plan you chose when the data was small.</p>
+<p>A short habit list (my synthesis): read <code>EXPLAIN ANALYZE</code> for the five slowest queries; check estimated against actual rows; keep statistics fresh; treat a hint as a code smell with an expiry date; and when you hand-write an access path, say in a comment what data shape you assumed.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0016"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "In configuration B (no index on orders.status), how did the optimizer's plan compare with forcing the written join order?",
+  "options": [
+   "Both plans read about the same number of rows",
+   "The forced written order read about 42 times more",
+   "The optimizer's own plan read about 42 times more",
+   "The forced order was cheaper because indexes were unused"
+  ],
+  "answer": 1,
+  "why": "The optimizer started from the tiny regions table and read 24,054 rows; the hard-coded orders-first order read 1,020,004. The SQL text was identical in both cases."
+ },
+ {
+  "q": "Why can an optimizer's chosen plan differ between two runs of identical SQL on identical data?",
+  "options": [
+   "Because identical SQL is compiled differently on each call",
+   "Because tables are physically reordered after every single query",
+   "Because EXPLAIN output is deliberately randomized for security reasons",
+   "Near-tied plans can flip when sampled statistics are refreshed"
+  ],
+  "answer": 3,
+  "why": "In configuration A two plans had nearly equal estimated cost. After statistics were re-sampled the optimizer picked one or the other, and the real reads differed (24,054 versus 40,002)."
+ },
+ {
+  "q": "What does EXPLAIN ANALYZE add compared with plain EXPLAIN in MySQL 8.0.18 and later?",
+  "options": [
+   "It executes the query and reports actual rows and time",
+   "It rewrites the query using only the cheapest known hint",
+   "It disables the optimizer and scans every table in order",
+   "It only estimates cost without ever touching any table data"
+  ],
+  "answer": 0,
+  "why": "EXPLAIN ANALYZE runs the statement and prints measured time, rows and loop counts beside the estimates, so you can see where the optimizer's guesses were wrong."
+ },
+ {
+  "q": "In the DynamoDB guidance the lesson cites, who plays the role of the optimizer?",
+  "options": [
+   "The database chooses join order from table statistics",
+   "A background process rewrites queries during idle periods",
+   "You, by choosing keys and access patterns upfront",
+   "The client SDK, by caching every result forever"
+  ],
+  "answer": 2,
+  "why": "DynamoDB design starts from the access patterns and the key layout you choose. There is no join planner, so the plan is effectively written into your data model."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: compare a plan with and without an index (20 minutes)</b></summary>
+<p>On a scratch copy of a table you own, run <code>EXPLAIN ANALYZE</code> on one real query, add or drop one index, and run it again. Note whether the join order changed and how estimated rows compared with actual rows. The <code>experiments/mysql/planner_run.sh</code> script is a template.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">E. F. Codd, CACM 1970 (data independence). <a href="https://web.eecs.umich.edu/~michjc/eecs584/Papers/codd_1970.pdf">PDF</a></li>
+<li id="s2">P. G. Selinger et al., &ldquo;Access Path Selection in a Relational Database Management System&rdquo;, SIGMOD 1979 (primary). <a href="https://courses.cs.washington.edu/courses/cse544/04sp/papers/selinger79.pdf">PDF</a>. Read via open copies and summaries (Colyer&rsquo;s <a href="https://blog.acolyer.org/2016/01/04/access-path-selection/">morning paper</a> among them).</li>
+<li id="s3">MySQL 8.0 Reference Manual, &ldquo;EXPLAIN Statement&rdquo; (formats, <code>EXPLAIN ANALYZE</code>). <a href="https://dev.mysql.com/doc/mysql/en/explain.html">dev.mysql.com</a></li>
+<li id="s4">MySQL 8.0 Reference Manual, &ldquo;Hash Join Optimization&rdquo;. <a href="https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/hash-joins.html">docs.oracle.com</a></li>
+<li id="s5">AWS, DynamoDB Developer Guide, &ldquo;First steps for modeling relational data in DynamoDB&rdquo;. <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-modeling-nosql.html">docs.aws.amazon.com</a></li>
+<li>Measurements: <code>experiments/mysql/planner_setup.sql</code> and <code>planner_run.sh</code> on MySQL 8.0.46 (small synthetic data; handler read counts; six <code>ANALYZE TABLE</code> refreshes per configuration). The toy planner is <code>assets/sim-planner.js</code>. Your hardware, version and data will produce different numbers.</li>
+</ol>
+<div class="pager"><a href="0015-graph-models.html">&larr; Lesson 15: Graph models</a><a href="0017-lab-model-one-workload.html">Lesson 17: Lab &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-planner.js"></script>
+</body></html>

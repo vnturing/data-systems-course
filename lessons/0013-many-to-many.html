@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Many-to-many, and why documents drift toward relations · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 2 · Lesson 13</p>
+<h1>Many-to-many, and why documents drift toward relations</h1>
+<p class="lede">A tree is easy to store in one record. A web of relationships is not, and the way data acquires relationships over time is the strongest argument in this whole module.</p>
+<div class="meta"><span>~45 min</span><span>1 interactive</span><span>builds on Lessons 2 and 12</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Choose a representation for a many-to-many relationship, name the crash-point hazards of each, and recognize the signs that an embedded design is turning into a relational one.</div>
+
+<h2>1. One-to-many is a tree; many-to-many is a graph</h2>
+<p>A person&rsquo;s positions are one-to-many: each position belongs to one person. But each position also points at a company, and a company has many people. That is <b>many-to-many</b>: people &harr; companies. The same shape appears as students and courses, articles and tags, users and groups, products and categories. In Lesson 12 the second relationship hid inside the first. This lesson pulls it out.</p>
+
+<h2>2. Three representations</h2>
+<ul>
+<li><b>One-sided array.</b> Each article has <code>tag_ids: [3, 7, 9]</code>. Reading an article&rsquo;s tags is one read. The reverse question, &ldquo;which articles have tag 7?&rdquo;, needs an index on the array or a full scan.</li>
+<li><b>Two-sided arrays.</b> The tag also keeps <code>article_ids</code>, so both directions are one read. The price is that every link is written in two places that must agree.</li>
+<li><b>Junction table (or collection).</b> One row per link, <code>(article_id, tag_id)</code>, indexed in both directions. Each direction costs about the size of the answer; a link is one write.</li>
+</ul>
+<div class="widget" id="sim-m2m"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>Two-sided arrays buy cheap reads with a consistency problem.</b> Attaching a tag is two document writes. Untick &ldquo;multi-document atomic commits available&rdquo; and the drill shows the state after the first write: the article lists the tag and the tag does not list the article. This is exactly Lesson 2, inside a single database.</li>
+<li><b>Deleting a tag is the stress test.</b> In both array designs it means rewriting every article that mentions it (250 at the default), and without atomic multi-document commit, being interrupted leaves dangling ids. With a junction table it is one statement.</li>
+<li><b>The junction table makes every question cost about the size of its answer</b> (see the reads columns) and removes the half-written states.</li>
+<li><b>Atomic multi-document commit changes the story but not the shape.</b> With transactions (always the case for rows in MySQL), the torn states vanish, but the array designs still pay the fan-out writes. MongoDB documents multi-document atomicity via distributed transactions rather than as the default.<sup class="c"><a href="#s1">[1]</a></sup></li>
+</ol>
+
+<h2>3. In MySQL</h2>
+<p>The junction table with cascading foreign keys is the plain-relational answer. The array alternative uses the multi-valued index you met in Lesson 12.</p>
+<pre><code class="sql" data-sql="L13">CREATE TABLE article (id INT PRIMARY KEY, title VARCHAR(80) NOT NULL);
+CREATE TABLE tag     (id INT PRIMARY KEY, name  VARCHAR(40) NOT NULL UNIQUE);
+CREATE TABLE article_tag (
+  article_id INT NOT NULL,
+  tag_id     INT NOT NULL,
+  PRIMARY KEY (article_id, tag_id),          -- tags of an article
+  KEY idx_tag (tag_id, article_id),          -- articles with a tag
+  FOREIGN KEY (article_id) REFERENCES article(id) ON DELETE CASCADE,
+  FOREIGN KEY (tag_id)     REFERENCES tag(id)     ON DELETE CASCADE
+);
+INSERT INTO article VALUES (1,'Retries'),(2,'Queues'),(3,'Joins');
+INSERT INTO tag     VALUES (1,'reliability'),(2,'performance');
+INSERT INTO article_tag VALUES (1,1),(2,1),(2,2),(3,2);
+-- articles with tag 2, and the tags of article 2: each uses an index, cost ~ size of the answer
+SELECT a.title FROM article_tag at JOIN article a ON a.id = at.article_id WHERE at.tag_id = 2;
+SELECT t.name  FROM article_tag at JOIN tag t     ON t.id = at.tag_id     WHERE at.article_id = 2;
+-- delete a tag everywhere: one statement, one transaction, no half-deleted state
+DELETE FROM tag WHERE id = 2;
+SELECT COUNT(*) AS links_left_for_tag_2 FROM article_tag WHERE tag_id = 2;</code></pre>
+<pre><code class="sql" data-sql="L13">-- the array alternative: one-sided ids with a multi-valued index for the reverse question
+CREATE TABLE article_doc (
+  id  INT PRIMARY KEY,
+  doc JSON NOT NULL,
+  KEY idx_tags ((CAST(doc-&gt;'$.tag_ids' AS UNSIGNED ARRAY)))
+);
+INSERT INTO article_doc VALUES (1,'{"title":"Retries","tag_ids":[1]}'),(2,'{"title":"Queues","tag_ids":[1,2]}');
+SELECT id FROM article_doc WHERE 2 MEMBER OF (doc-&gt;'$.tag_ids');</code></pre>
+<h3>DynamoDB</h3>
+<p>DynamoDB has no joins, and AWS&rsquo;s guidance says to start from the access patterns: list the questions the application asks before choosing keys.<sup class="c"><a href="#s2">[2]</a><a href="#s3">[3]</a></sup> The AWS compute blog works the same many-to-many case, contrasting the three-table SQL design with a single-table design built from the access patterns and noting the trade-off of having no joins.<sup class="c"><a href="#s3">[3]</a></sup> The pattern AWS documents for this is commonly called an adjacency list (I did not fetch that specific page; see the guidance for key layouts). In effect it is the junction table, stored as items keyed so that each direction can be queried.</p>
+
+<h2>4. Why documents drift toward relations</h2>
+<p>Here is how the drift usually goes, using the numbers you have measured:</p>
+<ol>
+<li><b>Embed</b> everything. The profile page is one read.</li>
+<li>A new feature needs the reverse question. You add an <b>index</b> on the embedded array (401 reads instead of 20,003).</li>
+<li>A shared fact changes. You discover it is copied into hundreds of documents and either live with stale copies or write a fan-out job (400 writes).</li>
+<li>You move the shared entity into its own collection and store a <b>reference</b>. The rename is cheap again; the profile page now costs a second trip.</li>
+<li>Now the page needs the company&rsquo;s industry for each position. The application does a <b>join</b> in code: fetch the document, collect the ids, batch-fetch the companies, stitch. You have reinvented the join, without a planner (Lesson 16).</li>
+</ol>
+<p>This is not a flaw of document databases. It is what happens when data with relationships acquires new questions over time. Stonebraker and Pavlo make the stronger claim that the two families are converging, with relational systems taking JSON and document systems taking relational features.<sup class="c"><a href="#s4">[4]</a></sup> The practical rule I would carry from it: <b>when a relationship is genuinely many-to-many and the related thing has its own lifecycle, give the relationship a first-class home (a junction table, or its own collection with keys) before you need it</b>, and embed only what is truly part of the parent.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0013"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "Both the article and the tag keep arrays of ids. The process dies between the two writes that attach a tag. What state results?",
+  "options": [
+   "Both records roll back and nothing at all remains linked",
+   "The article lists the tag but the tag omits it",
+   "The database repairs the arrays automatically at the next restart",
+   "Both records are linked, with the tag counted twice overall"
+  ],
+  "answer": 1,
+  "why": "Two independent document writes with no atomic multi-document commit leave the two sides disagreeing after the first one. A junction row is a single write, so there is no half-linked state."
+ },
+ {
+  "q": "Which representation makes 'delete this tag everywhere' a single-statement, single-transaction operation in MySQL?",
+  "options": [
+   "Arrays of tag ids inside each article document",
+   "Arrays on both sides, synced by application code",
+   "A junction table with cascading foreign key rules",
+   "A text column holding comma-separated tag name lists"
+  ],
+  "answer": 2,
+  "why": "With a junction table and ON DELETE CASCADE, one DELETE removes the tag and every link atomically. The array designs must find and rewrite every article that mentions the tag."
+ },
+ {
+  "q": "Why does an array of ids inside each article need a multi-valued index?",
+  "options": [
+   "Arrays cannot be stored without a secondary index",
+   "Finding articles by tag would scan every document",
+   "The index enforces uniqueness of each tag id",
+   "Without it the array loses its element order"
+  ],
+  "answer": 1,
+  "why": "The array is organized around the question 'what are this article's tags'. The reverse question needs an index on the array path, or the engine examines all documents (20,003 reads against 401 in the measurement)."
+ },
+ {
+  "q": "What is the practical trend the lesson describes for data modeled as documents with embedded relationships?",
+  "options": [
+   "Embedded designs accumulate indexes, references and application joins",
+   "Documents become smaller as more features are added",
+   "Relationships disappear entirely once the data is denormalized",
+   "Schemas become simpler because no keys are needed"
+  ],
+  "answer": 0,
+  "why": "As new questions arrive (reverse lookups, shared updates, cross-entity queries), embedded designs tend to gain secondary indexes, references to separate collections, and application-side joins, which is a relational design arriving by another route."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: find a hidden many-to-many (10 minutes)</b></summary>
+<p>Look at a document or JSON column you own and find an array of ids. Which question can you not answer without scanning? If a reverse lookup, an index; if a shared update, a reference or a junction; and if neither exists yet, note which feature would force it.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">MongoDB documentation, &ldquo;Best Practices for Data Modeling in MongoDB&rdquo;. <a href="https://mongodb.com/docs/manual/data-modeling/concepts/embedding-vs-references/">mongodb.com/docs</a></li>
+<li id="s2">AWS, DynamoDB Developer Guide, &ldquo;First steps for modeling relational data in DynamoDB&rdquo;. <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-modeling-nosql.html">docs.aws.amazon.com</a></li>
+<li id="s3">AWS Compute Blog, &ldquo;Creating a single-table design with Amazon DynamoDB&rdquo;. <a href="https://aws.amazon.com/blogs/compute/creating-a-single-table-design-with-amazon-dynamodb">aws.amazon.com/blogs</a>. I confirmed the access-pattern-first approach and the many-to-many comparison from the search excerpts; read the post for the key designs.</li>
+<li id="s4">Stonebraker and Pavlo, SIGMOD Record 2024 (the convergence argument; written by relational advocates). <a href="https://db.cs.cmu.edu/papers/2024/whatgoesaround-sigmodrec2024.pdf">PDF</a></li>
+<li>The drift sequence is my own synthesis. The cost numbers are measurements from <code>experiments/mysql/</code> (MySQL 8.0.46, small synthetic data).</li>
+</ol>
+<div class="pager"><a href="0012-relational-or-document.html">&larr; Lesson 12: Relational or document?</a><a href="0014-schema-on-read-and-write.html">Lesson 14: Schema on read or write &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-m2m.js"></script>
+</body></html>

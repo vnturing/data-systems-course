@@ -70,6 +70,26 @@ Verification status: entries below were located and checked via web search on 20
   Secondary. Formulas for mean response. The p99 = ln(100)/(1-rho) result for FCFS and the Pollaczek-Khinchine M/G/1 formula are standard; this course verifies them numerically in `tools/test-queue.js` (they are not quoted from Wikipedia).
 - Secondary, used with labels: ClickHouse "Percentiles vs averages" and "SLO, SLI, SLA"; Zuplo on load-test workload models; Kiril Latish on Little's law; DZone and Third Bit queueing articles (further reading only); Murat Demirbas and Adrian Colyer summaries of Hamilton.
 
+### Added 2026-11-11 (Module 2, Lessons 12 to 17)
+
+- [Paper: A Relational Model of Data for Large Shared Data Banks, E. F. Codd, CACM 1970](https://web.eecs.umich.edu/~michjc/eecs584/Papers/codd_1970.pdf)
+  Primary. Data independence; ordering, indexing and access-path dependence. Verified via several full-text copies. Use for: Lessons 12, 16.
+- [History: What Goes Around Comes Around, Stonebraker and Hellerstein, Readings in Database Systems 4th ed., 2005](https://courses.cs.washington.edu/courses/cse444/25wi/papers/goes-around.pdf)
+  Primary. Data-model eras. The "supplier with no parts" hierarchy example in Lesson 12 is from my recollection of their treatment plus summaries; confirm in the text before quoting.
+- [History: What Goes Around Comes Around... And Around..., Stonebraker and Pavlo, SIGMOD Record 53(2), 2024, doi 10.1145/3685980.3685984](https://db.cs.cmu.edu/papers/2024/whatgoesaroundaround-sigmodrec2024.pdf)
+  Primary, **an argument by relational advocates** (presented as such in the lessons). The document-DB convergence and graph-DB benchmark claims (including the up-to-10x SQL/PGQ comparison) were verified only via summaries and excerpts, not the paper's tables. Verify before relying on any specific figure. Northeastern course copy: https://khoury.northeastern.edu/home/pandey/courses/cs7270/fall25/papers/intro/whatgoesaroundaround-stonebraker.pdf. Use for: Lessons 12, 13, 15.
+- [Docs: MongoDB, Best Practices for Data Modeling](https://mongodb.com/docs/manual/data-modeling/concepts/embedding-vs-references/)
+  Primary vendor docs. Single-document write atomicity, embedding vs referencing, multi-document transactions. Use for: Lessons 12, 13.
+- [Docs: AWS DynamoDB Developer Guide, First steps for modeling relational data](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-modeling-nosql.html) and [AWS Compute Blog, Creating a single-table design with DynamoDB](https://aws.amazon.com/blogs/compute/creating-a-single-table-design-with-amazon-dynamodb)
+  Primary vendor docs. Access patterns first; few tables; many-to-many contrast. The adjacency-list pattern page and key designs were NOT fetched; the Lesson 17 key layout is a labeled sketch, not validated on DynamoDB. Use for: Lessons 12, 13, 16, 17.
+- [Manual: MySQL 8.0, JSON data type](https://dev.mysql.com/doc/refman/8.0/en/json.html), [JSON schema validation functions](https://dev.mysql.com/doc/refman/8.0/en/json-validation-functions.html), [WITH (CTEs)](https://dev.mysql.com/doc/refman/8.0/en/with.html), [EXPLAIN](https://dev.mysql.com/doc/mysql/en/explain.html), [Hash joins](https://docs.oracle.com/cd/E17952_01/mysql-8.0-en/hash-joins.html)
+  Primary. **Every behavior used in the lessons was also reproduced on a real MySQL 8.0.46 server** (experiments/mysql/). I did not check 8.4 or 9.x behavior, nor the 8.0 support lifecycle: check these for your version.
+- [Paper: Access Path Selection in a Relational Database Management System, Selinger et al., SIGMOD 1979](https://courses.cs.washington.edu/courses/cse544/04sp/papers/selinger79.pdf)
+  Primary. Cost-based optimization, join-order search, selectivity. Verified via open copies and Colyer's summary. Use for: Lesson 16.
+- [Essay: Schemaless Data Structures, Martin Fowler](https://martinfowler.com/articles/schemaless)
+  Primary-adjacent. Implicit schema. Verified via search excerpts. Use for: Lesson 14.
+- Standards, verified only through secondary explanations: ISO/IEC 39075:2024 (GQL) and ISO/IEC 9075-16:2023 (SQL/PGQ). Use for: Lesson 15. Whether MySQL supports SQL/PGQ was NOT verified.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -84,6 +104,8 @@ Verification status: entries below were located and checked via web search on 20
 - Kleppmann and Riccomini, Designing Data-Intensive Applications, 2nd ed. (O'Reilly, 2026): mentioned in Cambridge Databases notes. This course is inspired by the topic space, not a copy of any chapter.
 
 ## Gaps
+
+- Module 2 follow-ups: MySQL 8.4 LTS / 9.x behavior of the features used (JSON validation, multi-valued indexes, hash join, EXPLAIN ANALYZE); the DynamoDB adjacency-list and GSI pages; the full Stonebraker/Pavlo benchmark tables; the Neo4j/Cypher manual for the variable-length path syntax shown as a sketch; histogram statistics in MySQL (column statistics) for the correlated-predicates discussion; Mongo document size limit and MySQL's JSON size limit.
 
 - MySQL-specific: replication and semi-sync docs, InnoDB isolation levels and MVCC, Group Replication, binlog/GTID, Debezium MySQL connector. (Learner runs MySQL.)
 - AWS-specific: RDS and Aurora failover behavior, MSK defaults and configuration, DynamoDB consistency and transactions, SQS standard queue docs, SDK retry modes and defaults per language.

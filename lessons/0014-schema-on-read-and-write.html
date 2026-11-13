@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Schema on read or schema on write · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 2 · Lesson 14</p>
+<h1>Schema on read or schema on write: the schema you did not write is still there</h1>
+<p class="lede">&ldquo;Schemaless&rdquo; does not mean no schema. It means the schema is not in the database, which moves it somewhere you may not be looking.</p>
+<div class="meta"><span>~40 min</span><span>1 interactive</span><span>builds on Lessons 1 and 12</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Say where each rule about your data is enforced, predict what happens when a record&rsquo;s shape changes, and choose between enforcing in the database, in each reader, or both.</div>
+
+<h2>1. The implicit schema</h2>
+<p>Two phrases are worth defining. <b>Schema on write</b> means the structure is declared up front and checked when data is written, as in relational DDL. <b>Schema on read</b> means records are stored as they arrive and interpreted when they are read. Martin Fowler&rsquo;s widely cited essay on &ldquo;schemaless&rdquo; data structures makes the key observation: a schemaless store still has an <i>implicit schema</i>, because the code that reads the data assumes a structure (it expects a field called <code>first</code> or a number in <code>seats</code>). He concludes that an explicit schema is generally preferable, with some exceptions, and that when you do have a schemaless store the schema lives in the application and is best treated as a contract defined in one place.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>So the honest question is never &ldquo;schema or no schema?&rdquo; It is <b>&ldquo;where does the schema live, and how many copies of it exist?&rdquo;</b> In a relational table there is one copy, enforced by the engine. In a schemaless store there is one copy per reader.</p>
+
+<h2>2. Three readers, three ages</h2>
+<p>Your records were written over a year. At first each had a <code>name</code> and a <code>plan</code> string. Then <code>name</code> became <code>first</code> and <code>last</code>. Then <code>plan</code> became an object with a tier and a seat count. Three programs read these records: the billing job (written first), the analytics export (updated once), and the search indexer (always current). Nothing in the store distinguishes them.</p>
+<div class="widget" id="sim-schema"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>Each reader carries its own copy of the schema, and each copy is a different age.</b> The billing job handles only v1, so half the records are outside its knowledge.</li>
+<li><b>In tolerant mode the failures are silent.</b> The reader falls back to placeholders (<code>Unknown</code>, <code>free</code>) and reports success. Billing the wrong tier is the kind of bug found by a customer, not a test.</li>
+<li><b>Switch to strict mode.</b> The same reader, on the same data, now fails loudly on exactly the records it was silently getting wrong. The loud-error percentage equals the silently-wrong percentage you just saw. A visible failure can be alerted on.</li>
+<li><b>Now tick every box for every reader.</b> All three become correct, but only because three separate teams each updated their code. The database did not help, because the database never knew the shape.</li>
+</ol>
+
+<h2>3. Where can a rule live?</h2>
+<table>
+<tr><th>Placement</th><th>Applies to</th><th>Can a writer bypass it?</th></tr>
+<tr><td>Typed columns, <code>NOT NULL</code>, foreign keys, <code>CHECK</code></td><td>Every write, enforced by the engine</td><td>No</td></tr>
+<tr><td>JSON column with <code>CHECK (JSON_SCHEMA_VALID(...))</code></td><td>Every write to that column</td><td>No</td></tr>
+<tr><td>Validation in application code</td><td>Writers that call it</td><td>Yes: another service, a script, a migration</td></tr>
+<tr><td>Tolerant reading with defaults</td><td>One reader</td><td>Not a write-time rule at all</td></tr>
+<tr><td>A convention in a wiki</td><td>Whoever read it</td><td>Yes</td></tr>
+</table>
+<p>MySQL lets you get write-time enforcement even inside a JSON column. I ran this on 8.0.46: the first insert below is accepted; the second, a v1-shaped record, is rejected by the database with error 3819 (check constraint violated). The manual documents the validation functions and lists limitations, so check them for your version.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<pre><code class="sql" data-sql="L14">CREATE TABLE account (
+  id  INT PRIMARY KEY,
+  doc JSON NOT NULL,
+  CONSTRAINT account_v3 CHECK (JSON_SCHEMA_VALID(
+    '{"type":"object","required":["first","last","plan"],
+      "properties":{"first":{"type":"string"},"last":{"type":"string"},
+                    "plan":{"type":"object","required":["tier","seats"],
+                            "properties":{"tier":{"enum":["free","pro"]},"seats":{"type":"integer"}}}}}', doc))
+);
+INSERT INTO account VALUES (1, '{"first":"Ada","last":"Lovelace","plan":{"tier":"pro","seats":3}}');</code></pre>
+<pre><code class="sql" data-sql="L14" data-expect-error="3819">-- an old-shape record: the database refuses it
+INSERT INTO account VALUES (2, '{"name":"Grace Hopper","plan":"pro"}');</code></pre>
+<pre><code class="sql" data-sql="L14">-- promote a hot field out of the document into a typed, indexed column
+ALTER TABLE account
+  ADD COLUMN tier VARCHAR(10) GENERATED ALWAYS AS (doc-&gt;&gt;'$.plan.tier') VIRTUAL,
+  ADD KEY idx_tier (tier);
+SELECT id FROM account WHERE tier = 'pro';</code></pre>
+<pre><code class="sql" data-sql="L14">-- the plain relational alternative, and the "expand" step of a migration:
+-- add the new column as nullable with a default, so old writers keep working
+CREATE TABLE account_rel (
+  id INT PRIMARY KEY, first_name VARCHAR(40) NOT NULL, last_name VARCHAR(40) NOT NULL,
+  tier ENUM('free','pro') NOT NULL DEFAULT 'free', seats INT NOT NULL DEFAULT 1);
+ALTER TABLE account_rel ADD COLUMN email VARCHAR(100) NULL;
+INSERT INTO account_rel (id, first_name, last_name) VALUES (1, 'Ada', 'Lovelace');
+SELECT * FROM account_rel;</code></pre>
+<h2>4. Changing shape without a flag day (my synthesis)</h2>
+<p>Because writers and readers deploy at different times (Lesson 1&rsquo;s world), two shapes coexist for a while no matter how disciplined you are. A migration pattern that respects that is often called <b>expand and contract</b>:</p>
+<ol>
+<li><b>Expand:</b> add the new field as optional (or add the new column with a default). Old writers keep working.</li>
+<li>Deploy <b>readers</b> that accept both shapes. This is where tolerance is correct, as a transition state.</li>
+<li>Switch <b>writers</b> to the new shape, then <b>backfill</b> old records.</li>
+<li><b>Contract:</b> make the new field required (a constraint), make readers strict, remove the old field.</li>
+</ol>
+<p>The end state is explicit and enforced. Tolerance is a tool for the middle, not a place to live. Module 4 returns to this with binary encodings, where the same compatibility rules are checked by the format itself.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0014"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "In the lab, why does the v1-only reader with tolerant defaults produce silently wrong results for v2 records?",
+  "options": [
+   "The database rejects those records without telling anyone",
+   "Version two records are encrypted and unreadable here",
+   "It substitutes placeholders for fields it never learned",
+   "Tolerant readers always crash on unknown shapes immediately"
+  ],
+  "answer": 2,
+  "why": "A tolerant reader falls back to defaults for fields it does not know, so it returns plausible but wrong values. Nothing fails, which is why nobody notices."
+ },
+ {
+  "q": "What is the main advantage of failing loudly on an unknown shape?",
+  "options": [
+   "Wrong answers become visible errors, not silent ones",
+   "Readers run faster because they skip validation entirely",
+   "Old records are upgraded automatically to newest shape",
+   "Writers no longer need to know any schema"
+  ],
+  "answer": 0,
+  "why": "The same data and the same reader produce loud errors instead of silent ones. A visible failure can be alerted on and fixed; a silent one is just wrong data."
+ },
+ {
+  "q": "Which rule placement cannot be bypassed by a writer that skips your application code?",
+  "options": [
+   "Validation inside a single service's request handler",
+   "Fallback defaults chosen separately by every reader",
+   "A convention documented in the team wiki",
+   "A database CHECK or NOT NULL constraint"
+  ],
+  "answer": 3,
+  "why": "Only rules enforced by the database apply to every writer. Application validation covers only the code paths that call it, and conventions cover nothing."
+ },
+ {
+  "q": "During a rolling migration to a new shape, why must readers stay tolerant?",
+  "options": [
+   "Tolerance is required by every database storage engine",
+   "Old and new shapes coexist until backfill finishes",
+   "Strict readers cannot be deployed during any migration",
+   "Constraints are disabled whenever a column is added"
+  ],
+  "answer": 1,
+  "why": "While writers are being switched and old records backfilled, both shapes are present at once. A strict final state is fine, but the path to it needs readers that accept both."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: count the copies of your schema (15 minutes)</b></summary>
+<p>Pick one table or collection. List every program that reads it. For one important field, write down what each program assumes about its type and what it does if the field is missing. The number of different answers is the number of copies of your schema.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Martin Fowler, &ldquo;Schemaless Data Structures&rdquo; (2013). Implicit schema, explicit schema as generally preferable with exceptions, schema as a contract in the data access layer. <a href="https://martinfowler.com/articles/schemaless">martinfowler.com</a>. Verified from search excerpts; read the essay for the full argument.</li>
+<li id="s2">MySQL 8.0 Reference Manual, &ldquo;JSON Schema Validation Functions&rdquo; (<code>JSON_SCHEMA_VALID</code>, use in <code>CHECK</code>). <a href="https://dev.mysql.com/doc/refman/8.0/en/json-validation-functions.html">dev.mysql.com</a>. Behavior (accept/reject, error 3819) reproduced on 8.0.46; see <code>experiments/mysql/json_features.sql</code>.</li>
+<li>The reader lab is this course&rsquo;s own deterministic model (<code>assets/sim-schema.js</code>); expand/contract is my synthesis. Schema-on-read and schema-on-write are used here in their common informal sense.</li>
+</ol>
+<div class="pager"><a href="0013-many-to-many.html">&larr; Lesson 13: Many-to-many</a><a href="0015-graph-models.html">Lesson 15: Graph models &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-schema.js"></script>
+</body></html>

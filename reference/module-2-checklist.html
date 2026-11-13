@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Module 2 checklist · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="module-1-checklist.html">Module 1 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Reference sheet · Module 2</p>
+<h1>Data models and query languages: rules and measured numbers</h1>
+<p class="lede">One page for design reviews. &ldquo;Measured&rdquo; = MySQL 8.0.46 on a small synthetic dataset; the shapes matter more than the digits. Scripts: <code>experiments/mysql/</code>.</p>
+
+<h2>Start here</h2>
+<ol>
+<li>List the access patterns and how often each runs. Everything below depends on it. (If unknown, measure first.)</li>
+<li>For each shared fact: must it change everywhere at once, or is a copy a snapshot?</li>
+<li>Where does each rule live, and what plan will the data be read with?</li>
+</ol>
+
+<h2>Embed vs reference <small>(Lessons 12, 13)</small></h2>
+<table>
+<tr><th>Measured (20,000 people, 4 positions, 2 educations, 400 people per company)</th><th>Normalized</th><th>JSON document per person</th></tr>
+<tr><td>Load one full profile</td><td>13 reads, 3 round trips (one join: 22 reads, 8 repeated rows)</td><td>1 read, 1 round trip</td></tr>
+<tr><td>Rename a shared company</td><td>1 row</td><td>400 documents rewritten</td></tr>
+<tr><td>Everyone at company X</td><td>801 reads</td><td>401 with a multi-valued index; 20,003 without</td></tr>
+<tr><td>Name only</td><td>~45 bytes</td><td>whole ~390-byte document</td></tr>
+</table>
+<ul>
+<li>Embed: read together, bounded, no independent life, snapshot semantics. Reference: shared, unbounded growth, independent updates.</li>
+<li>Torn multi-document writes are a property of the <b>engine</b> (single-document atomicity only), not of the model. MySQL rows in one transaction are not torn. Without atomic multi-document commit, run Lesson 2's crash-point drill on every fan-out.</li>
+<li>Many-to-many: junction table + indexes both ways + cascading foreign keys = one-statement delete, no half-linked states. Two-sided arrays = two writes per link (one torn state).</li>
+<li>Drift: embed &rarr; add index &rarr; shared update fan-out &rarr; extract entity &rarr; application join. Give a genuine many-to-many its own home early.</li>
+</ul>
+
+<h2>MySQL JSON <small>(Lessons 12, 14)</small></h2>
+<ul>
+<li>A JSON column cannot be indexed directly: index a <b>generated column</b> for a scalar path, or a <b>multi-valued index</b> (<code>CAST(... AS UNSIGNED ARRAY)</code>) for an array, queried with <code>MEMBER OF</code>.</li>
+<li>An unindexed path predicate scans (EXPLAIN type <code>ALL</code>).</li>
+<li><code>CHECK (JSON_SCHEMA_VALID(schema, doc))</code> rejects wrong-shaped documents at write (error 3819).</li>
+<li>Verified on 8.0.46 against the 8.0 manual. Check your version's manual and support status.</li>
+</ul>
+
+<h2>Schema <small>(Lesson 14)</small></h2>
+<ul>
+<li>&ldquo;Schemaless&rdquo; = implicit schema in code. One copy of the schema per reader.</li>
+<li>Tolerant defaults turn shape changes into <b>silent wrong answers</b>; strict readers turn them into loud errors. Prefer loud.</li>
+<li>Only database-enforced rules (types, NOT NULL, FK, CHECK) bind every writer.</li>
+<li>Migrate by expand and contract: add optional &rarr; readers accept both &rarr; switch writers + backfill &rarr; make required + strict &rarr; remove old. Tolerance is for the middle.</li>
+</ul>
+
+<h2>Graph <small>(Lesson 15)</small></h2>
+<ul>
+<li>Variable-depth questions need a recursive query or a graph engine. Walks of length h = d<sup>h</sup>; distinct people reached &le; size of the graph.</li>
+<li><b>Recursive CTE:</b> <code>UNION DISTINCT</code> stops a cycle only if the carried columns repeat. Add a hop counter and it won't (error 3636 at the recursion limit); cap the hops. <code>UNION ALL</code> counts paths (measured: 6,561 rows at hop 8 for a 2,000-person graph).</li>
+<li>Always bound hops on user-facing queries; use a visited set (or <code>UNION DISTINCT</code> without a counter).</li>
+<li>Graph engine cost: another system, another language, data to keep in sync (outbox / change capture).</li>
+</ul>
+
+<h2>Optimizer <small>(Lesson 16)</small></h2>
+<table>
+<tr><th>Config (1M orders, 100K customers, 50 regions)</th><th>Real optimizer</th><th>Forced as-written order</th></tr>
+<tr><td>All 3 secondary indexes</td><td>near tie: 24,054 reads (2 of 6) or 40,002 (4 of 6)</td><td>40,002</td></tr>
+<tr><td>No index on orders.status</td><td>24,054</td><td><b>1,020,004 (42&times;)</b></td></tr>
+<tr><td>No index on customers.region_id / orders.customer_id</td><td>40,002</td><td>40,002</td></tr>
+<tr><td>Primary keys only</td><td>1,020,004</td><td>1,020,004</td></tr>
+</table>
+<ul>
+<li>Read <code>EXPLAIN ANALYZE</code> (8.0.18+): compare estimated and actual rows at each node. Big gaps: correlated predicates or stale statistics (measured: estimated 3,896, actual 20,000).</li>
+<li>Near-tied plans can flip after <code>ANALYZE TABLE</code>. Hints (<code>STRAIGHT_JOIN</code>) freeze a plan; give each an expiry.</li>
+<li>In DynamoDB-style stores <i>you</i> are the optimizer: access patterns first, keys second.</li>
+</ul>
+
+<h2>Sources</h2>
+<p>See the sources list at the end of Lessons <a href="../lessons/0012-relational-or-document.html">12</a>, <a href="../lessons/0013-many-to-many.html">13</a>, <a href="../lessons/0014-schema-on-read-and-write.html">14</a>, <a href="../lessons/0015-graph-models.html">15</a>, <a href="../lessons/0016-declarative-queries-and-optimizers.html">16</a> and <a href="../lessons/0017-lab-model-one-workload.html">17</a>.</p>
+<div class="pager"><a href="../index.html">&larr; Course home</a><a href="../syllabus.html">Syllabus &rarr;</a></div>
+</main></body></html>

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Graph models · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 2 · Lesson 15</p>
+<h1>Graph models: when the relationships are the data</h1>
+<p class="lede">If the interesting questions are about paths of unknown length, you are in graph territory. The hard part turns out to be arithmetic, not storage.</p>
+<div class="meta"><span>~50 min</span><span>1 interactive</span><span>cross-checked against MySQL</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Recognize a graph-shaped workload, write a multi-hop query with MySQL recursive CTEs without looping forever, predict how fast the work grows per hop, and say what a dedicated graph engine does and does not change.</div>
+
+<h2>1. When to think graph</h2>
+<p>Lesson 13 gave you many-to-many as a junction table. That works well while your questions are one or two hops: &ldquo;the tags of this article&rdquo;, &ldquo;who worked at this company&rdquo;. It strains when the question is <b>variable-depth</b>: friends within three hops, every service that transitively depends on this one, accounts connected to a fraudulent account through any chain of shared devices. A fixed number of joins cannot express &ldquo;any number of hops&rdquo;.</p>
+
+<h2>2. The property graph model</h2>
+<p>The most common graph data model for databases is the <b>property graph</b>: vertices (nodes) and directed edges, where both can carry labels and key-value properties. The standards agree on this model: ISO/IEC 39075 (GQL), published in 2024 as the first international standard for a graph query language, and part 16 of SQL:2023, SQL/PGQ, which adds graph pattern matching over ordinary tables.<sup class="c"><a href="#s1">[1]</a></sup> In relational terms, vertices are rows in one or more tables and edges are rows in an edge table <code>(src, dst, ...)</code>. The data you already have may already be a graph. What changes is the query language: path patterns instead of join chains.</p>
+<p>In a Cypher-style language, three hops of &ldquo;who does person 1 follow, transitively&rdquo; is one pattern (syntax differs between engines, so treat this as a sketch):</p>
+<pre><code>MATCH (me:Person {id: 1})-[:FOLLOWS*1..3]->(other:Person)
+RETURN DISTINCT other.id</code></pre>
+<p>MySQL has no graph pattern syntax that I verified. (I did not check whether your version supports SQL/PGQ; look it up.) It does have <b>recursive common table expressions</b>, which the manual describes as suited to traversing hierarchical or graph-shaped data.<sup class="c"><a href="#s2">[2]</a></sup> Each iteration works only on the rows produced by the previous one, and <code>UNION DISTINCT</code> eliminates duplicate rows, which the manual notes is useful for computing transitive closure and avoiding infinite loops.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<pre><code class="sql" data-sql="L15">CREATE TABLE follows (src INT NOT NULL, dst INT NOT NULL, PRIMARY KEY (src, dst), KEY (dst));
+-- a small graph with a cycle 1 -&gt; 2 -&gt; 3 -&gt; 1
+INSERT INTO follows VALUES (1,2),(2,3),(3,1),(3,4),(4,5),(2,5);
+
+-- Who can person 1 reach? No changing column is carried, so UNION DISTINCT stops on the cycle.
+WITH RECURSIVE reach(node) AS (
+  SELECT 1
+  UNION DISTINCT
+  SELECT f.dst FROM reach r JOIN follows f ON f.src = r.node
+)
+SELECT node FROM reach ORDER BY node;</code></pre>
+<pre><code class="sql" data-sql="L15">-- Same question, but you want the number of hops: carry a counter AND cap it.
+WITH RECURSIVE reach(node, hops) AS (
+  SELECT 1, 0
+  UNION DISTINCT
+  SELECT f.dst, r.hops + 1 FROM reach r JOIN follows f ON f.src = r.node WHERE r.hops &lt; 3
+)
+SELECT node, MIN(hops) AS fewest_hops FROM reach GROUP BY node ORDER BY node;</code></pre>
+<pre><code class="sql" data-sql="L15">-- Walk enumeration (UNION ALL) counts paths, not people: 5 people, many more rows.
+WITH RECURSIVE walks(node, hops) AS (
+  SELECT 1, 0
+  UNION ALL
+  SELECT f.dst, w.hops + 1 FROM walks w JOIN follows f ON f.src = w.node WHERE w.hops &lt; 10
+)
+SELECT COUNT(*) AS rows_produced, COUNT(DISTINCT node) AS distinct_people FROM walks;</code></pre>
+<pre><code class="sql" data-sql="L15" data-expect-error="3636">-- The trap: carrying a counter and NO cap. Rows differ at every lap of the cycle, so
+-- duplicate elimination never fires and MySQL aborts at the recursion limit (error 3636).
+SET SESSION cte_max_recursion_depth = 50;
+WITH RECURSIVE reach(node, hops) AS (
+  SELECT 1, 0
+  UNION DISTINCT
+  SELECT f.dst, r.hops + 1 FROM reach r JOIN follows f ON f.src = r.node
+)
+SELECT COUNT(*) FROM reach;</code></pre>
+<p>I ran all four on MySQL 8.0.46. The first returns the five reachable people. The third produces 20 rows for those 5 people. The fourth aborts with error 3636. That last one is the gotcha the documentation does not spell out: <b><code>UNION DISTINCT</code> only stops a cycle if the carried columns repeat</b>. The moment you add a hop counter without a cap, the rows are all different and the recursion runs until the limit.</p>
+
+<h2>3. The arithmetic of hops</h2>
+<p>Take a graph where each person follows <i>d</i> others. The number of <b>walks</b> of length <i>h</i> from one person is <i>d</i><sup><i>h</i></sup>. The number of <b>distinct people</b> within <i>h</i> hops cannot exceed the size of the graph. A naive traversal produces walks; a traversal with a visited set produces people. The gap between them is the whole story.</p>
+<div class="widget" id="sim-graph"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>I cross-checked this model against MySQL: for the same 2,000-person graph with 3 follows each, the JavaScript model and the recursive CTEs agree exactly. New people reached at hops 1 to 8: 3, 9, 26, 73, 184, 401, 603, 419 (the growth bends as the graph fills up). Rows produced by walk enumeration at the same hops: 3, 9, 27, 81, 243, 729, 2,187, 6,561. By hop 8 the naive query has produced 6,561 rows describing a 2,000-person graph.</p>
+<h3>What to notice</h3>
+<ol>
+<li><b>Fan-out compounds.</b> At 30 follows each, three hops is already 27,000 walks, more than the whole 20,000-person graph. &ldquo;Friends of friends of friends&rdquo; is most of the network.</li>
+<li><b>The answer saturates; the naive work does not.</b> The distinct-people column levels off while the walks column keeps multiplying by about <i>d</i>.</li>
+<li><b>This is true in any engine.</b> A dedicated graph database expands each person once, as a visited set does, but if the answer is 15,000 people, the answer is 15,000 people.</li>
+</ol>
+
+<h2>4. What a graph database buys and costs</h2>
+<p>Stonebraker and Pavlo&rsquo;s 2024 survey is the sharpest published view, from authors with a stake in the relational model. They argue that graph queries can be run on relational systems, report results where graph simulation on a relational engine matched or beat specialized graph systems, and note that SQL/PGQ was standardized to narrow the gap, with one engine&rsquo;s SQL/PGQ implementation reported to be up to 10&times; faster than a leading graph database in one comparison.<sup class="c"><a href="#s3">[3]</a></sup> Treat those as the authors&rsquo; reading of a contested area, not a settled ranking. A balanced list of trade-offs:</p>
+<table>
+<tr><th>What a dedicated graph engine can offer</th><th>What it costs you</th></tr>
+<tr><td>Path patterns with variable length, far more readable than recursive SQL</td><td>A second query language and a second system to learn and run</td></tr>
+<tr><td>Traversal machinery built for it (and tuning that goes with it)</td><td>A copy of your data that must be kept in sync, which is Lesson 2&rsquo;s dual-write problem again (use an outbox or change capture)</td></tr>
+<tr><td>Expressing graph algorithms (shortest path, connected components) directly</td><td>Another failure mode and another consistency story</td></tr>
+</table>
+<p>A reasonable default: model relationships as tables, use recursive CTEs while the queries are occasional and the depth is bounded, and reach for a graph engine when variable-depth traversal is core to the product. Either way, put a hop limit on user-facing queries.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0015"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "A recursive CTE with UNION DISTINCT carries a depth column and has no depth cap, on a graph with a cycle. What happens in MySQL?",
+  "options": [
+   "It returns each reachable node once, then stops",
+   "It silently drops the cycle and ignores rows",
+   "It converts itself into UNION ALL automatically instead",
+   "It aborts at the recursion limit, error 3636"
+  ],
+  "answer": 3,
+  "why": "Each lap around the cycle produces a row with a new depth, so duplicate elimination never sees a repeat. Without the depth column (or with a cap) the same query terminates."
+ },
+ {
+  "q": "Each person follows 10 others. Roughly how many walks of length 4 start from one person?",
+  "options": [
+   "About 10,000",
+   "About 400",
+   "About 40",
+   "About 1,000"
+  ],
+  "answer": 0,
+  "why": "Walks multiply by the out-degree at every hop: 10 x 10 x 10 x 10 = 10,000, even though the number of distinct people reached is capped by the size of the graph."
+ },
+ {
+  "q": "What does a visited set change about a multi-hop traversal?",
+  "options": [
+   "It makes every query run in constant time",
+   "It removes the need for any hop limit",
+   "Work stays proportional to people reached, not paths",
+   "It stores every path so results replay later"
+  ],
+  "answer": 2,
+  "why": "Remembering who has been reached means each person is expanded once. Work scales with the answer (bounded by the graph) instead of with the exploding number of paths."
+ },
+ {
+  "q": "According to the lesson, what does a dedicated graph database NOT remove?",
+  "options": [
+   "The need for any query language at all",
+   "The fan-out that grows with every additional hop",
+   "The basic distinction between vertices and edges entirely",
+   "Support for properties stored on relationships between nodes"
+  ],
+  "answer": 1,
+  "why": "Fan-out is a property of the data and the question, not of the storage engine. A graph engine offers better expressiveness and traversal primitives, but a four-hop query on a dense graph is still large."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: bound a traversal (15 minutes)</b></summary>
+<p>If you have a self-referencing table (an org chart, a category tree, a dependency list), write the reachability query with a hop cap. Then run it with the cap removed on a copy that contains a deliberate cycle and watch error 3636. Knowing what that failure looks like is worth more than knowing the syntax.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">ISO/IEC 39075:2024 (GQL) and ISO/IEC 9075-16:2023 (SQL/PGQ, part of SQL:2023); property graph model. Verified from several explanatory sources including the Wikipedia article on ISO/IEC 39075, a GQL overview (techwell) and the Postgres SQL/PGQ patch discussions (<i>secondary</i>; I did not read the standards). <a href="https://en.wikipedia.org/wiki/ISO/IEC_39075">Wikipedia</a></li>
+<li id="s2">MySQL 8.0 Reference Manual, &ldquo;WITH (Common Table Expressions)&rdquo;, recursive CTEs. <a href="https://dev.mysql.com/doc/refman/8.0/en/with.html">dev.mysql.com</a>. All four queries run on 8.0.46; see <code>experiments/mysql/recursive_cte.sql</code>.</li>
+<li id="s3">Stonebraker and Pavlo, SIGMOD Record 2024 (the graph-database discussion; <i>authors are relational advocates</i>). <a href="https://db.cs.cmu.edu/papers/2024/whatgoesaround-sigmodrec2024.pdf">PDF</a>. Their specific benchmark claims are reported as I read them in summaries and excerpts; verify in the paper.</li>
+<li>The traversal model is this course&rsquo;s own (<code>assets/sim-graph.js</code>), cross-checked exactly against MySQL in <code>experiments/mysql/graph_crosscheck.sql</code> and pinned in <code>tools/test-graph.js</code>.</li>
+</ol>
+<div class="pager"><a href="0014-schema-on-read-and-write.html">&larr; Lesson 14: Schema on read or write</a><a href="0016-declarative-queries-and-optimizers.html">Lesson 16: Declarative queries &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-graph.js"></script>
+</body></html>

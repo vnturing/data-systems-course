@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Relational or document? · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 2 · Lesson 12</p>
+<h1>Relational or document? Locality, joins, and what you give up</h1>
+<p class="lede">The question is not SQL versus NoSQL. It is what you want the unit of reading, writing and consistency to be.</p>
+<div class="meta"><span>~50 min</span><span>1 interactive</span><span>real MySQL measurements</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+For a given entity, decide what to embed and what to reference using measured costs: reading it whole, updating a fact that many records share, and looking records up from the other direction.</div>
+
+<h2>1. Where the models come from</h2>
+<p>Early databases forced programs to know how data was physically organized. Codd&rsquo;s 1970 paper argued for a relational model largely to give <b>data independence</b>: programs and terminal activity should not break when the storage representation changes. He singled out three dependencies to remove: <i>ordering</i> dependence, <i>indexing</i> dependence, and <i>access-path</i> dependence.<sup class="c"><a href="#s1">[1]</a></sup> The alternatives he was reacting to were the hierarchical (IMS-style) and network (CODASYL) models, which Stonebraker and Hellerstein&rsquo;s history walks through. In a strict hierarchy, for instance, data that does not fit under a single parent (their classic example is a supplier who currently supplies no parts) is awkward to represent at all.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<p>Fast forward: document databases revived tree-shaped, self-contained records. In 2024 Stonebraker and Pavlo revisited the history and argued that document databases and relational systems are on a collision course: relational systems have absorbed JSON, and document systems keep adding relational features.<sup class="c"><a href="#s3">[3]</a></sup> Read that as an argument from long-standing relational advocates, not as a neutral verdict. For your purposes what matters is the practical consequence: <b>you can mix both models inside MySQL</b>, so the design question is local to each entity.</p>
+
+<h2>2. One entity, two layouts</h2>
+<p>A professional-profile page has a person, several positions, several educations, and each position refers to a company. As a tree it is a natural single document:</p>
+<pre><code>{ "name": "Ada",
+  "positions":  [ {"company_id": 7, "company_name": "Acme", "title": "engineer"}, ... ],
+  "educations": [ {"school": "Analytical College"}, ... ] }</code></pre>
+<p>In the normalized layout the same data is four tables. I loaded identical data into both on a real MySQL 8.0.46: 20,000 people, 4 positions and 2 educations each, 200 companies (so 400 positions per company). The scripts are in <code>experiments/mysql/</code>. Measured by storage-engine row reads:</p>
+<table>
+<tr><th>Operation</th><th>Normalized tables</th><th>One JSON document per person</th></tr>
+<tr><td>Load one full profile</td><td>13 reads in 3 queries (person 1, positions + company names 9, educations 3). As a single join: 22 reads that return <b>8 rows</b>, because the 4 positions repeat against the 2 educations.</td><td><b>1 read</b>, 1 query</td></tr>
+<tr><td>Rename a company shared by 400 positions</td><td><b>1 row</b></td><td><b>400 documents</b> must each be rewritten (the name is copied into each)</td></tr>
+<tr><td>Everyone who worked at company 17</td><td>801 reads (index on <code>position.company_id</code>, plus fetching the people)</td><td><b>401</b> reads with a multi-valued index; <b>20,003</b> without it</td></tr>
+</table>
+<p>The lab below reproduces those measurements at its defaults and lets you move away from them.</p>
+
+<div class="widget" id="sim-layout"><noscript>This interactive needs JavaScript.</noscript></div>
+
+<h3>What to notice</h3>
+<ol>
+<li><b>Locality is real.</b> The profile page is one read from a document and a stack of reads from tables. If that page is your hottest path, the document layout deserves serious weight. (A third option, documents that <i>reference</i> companies by id, keeps the rename cheap but needs a second trip to fetch the names.)</li>
+<li><b>Locality costs duplication.</b> The cheap read is bought by copying the company name into every position. Every shared fact copied into many documents turns an update into a fan-out: 1 row became 400 documents. Drag &ldquo;people per company&rdquo; up and watch it grow.</li>
+<li><b>Reading part of a document reads all of it.</b> Fetching just a name from a document still loads the whole 390-byte unit; the normalized row is about 45 bytes. At this size it is noise, but documents that accumulate arrays (comments, events) get large. Document stores impose size limits; check yours.</li>
+<li><b>Look-ups from the other side need an index you must remember.</b> &ldquo;Everyone at company X&rdquo; is the question the document was not organized around. Without the multi-valued index it examined all 20,000 documents. Untick the index box.</li>
+<li><b>Tearing is a property of the engine.</b> The &ldquo;torn states&rdquo; row appears only when you untick atomic multi-document commit. See below.</li>
+</ol>
+
+<h2>3. Atomicity is about the engine, not the model</h2>
+<p>MongoDB&rsquo;s own data-modeling guidance puts the benefit of embedding directly: a single write operation on one document is atomic, so keeping related data in one document gives atomicity for free, while duplicating data across documents costs consistency work; for atomic updates across several documents you use distributed transactions instead.<sup class="c"><a href="#s4">[4]</a></sup> In MySQL a JSON column is simply a column, and updating 400 rows inside one transaction is ordinary. So the same rename that is a hazard on a single-document-atomicity store is safe on MySQL. When you <i>do</i> lack atomic multi-document commit, you are back in Lesson 2&rsquo;s crash-point drill: after the first of 400 writes the world contains two company names.</p>
+
+<h2>4. A decision rule you can defend (my synthesis)</h2>
+<table>
+<tr><th>Lean toward embedding when&hellip;</th><th>Lean toward separate tables or references when&hellip;</th></tr>
+<tr><td>The parts are almost always read with the parent, and have no life of their own</td><td>The parts are read, searched or updated independently</td></tr>
+<tr><td>The parts are bounded in number and size</td><td>A part can grow without bound (events, comments)</td></tr>
+<tr><td>The copied facts rarely change, or each copy is meant to be a snapshot</td><td>A fact is shared and must change everywhere at once (a company&rsquo;s name)</td></tr>
+<tr><td>One document is the natural unit of consistency</td><td>Several parents must stay consistent with one shared thing</td></tr>
+</table>
+<p>The company name is a good example of the difference between a <i>shared fact</i> and a <i>snapshot</i>. If the profile should show the name as it was when the person worked there, copying is correct, and the &ldquo;rename&rdquo; operation does not even exist. The cost model only matters for facts that must change everywhere.</p>
+
+<h2>5. The hybrid in MySQL</h2>
+<p>MySQL lets you keep a relational core and put variable or tree-shaped parts in a JSON column. Three things from the manual matter, and I confirmed each on 8.0.46: a JSON column cannot be indexed directly, so you index a generated column for a scalar path or a <b>multi-valued index</b> for an array;<sup class="c"><a href="#s5">[5]</a></sup> a <code>CHECK</code> constraint with <code>JSON_SCHEMA_VALID()</code> can reject a document of the wrong shape;<sup class="c"><a href="#s5">[5]</a></sup> and a comparison on an unindexed path scans the table.</p>
+<pre><code class="sql" data-sql="L12">CREATE TABLE company  (id INT PRIMARY KEY, name VARCHAR(40) NOT NULL);
+CREATE TABLE person   (id INT PRIMARY KEY, name VARCHAR(40) NOT NULL);
+CREATE TABLE position (
+  id         INT PRIMARY KEY AUTO_INCREMENT,
+  person_id  INT NOT NULL,
+  company_id INT NOT NULL,
+  title      VARCHAR(30) NOT NULL,
+  FOREIGN KEY (person_id)  REFERENCES person(id),
+  FOREIGN KEY (company_id) REFERENCES company(id),
+  KEY idx_company (company_id)
+);
+CREATE TABLE education (
+  id INT PRIMARY KEY AUTO_INCREMENT, person_id INT NOT NULL, school VARCHAR(40) NOT NULL,
+  FOREIGN KEY (person_id) REFERENCES person(id)
+);
+INSERT INTO company VALUES (7,'Acme'),(8,'Globex');
+INSERT INTO person  VALUES (1,'Ada');
+INSERT INTO position (person_id,company_id,title) VALUES (1,7,'engineer'),(1,8,'lead');
+INSERT INTO education (person_id,school) VALUES (1,'Analytical College'),(1,'Night School');
+-- the join that repeats rows: 2 positions x 2 educations = 4 rows for one person
+SELECT p.name, pos.title, c.name AS company, e.school
+FROM person p JOIN position pos ON pos.person_id = p.id
+              JOIN company  c   ON c.id = pos.company_id
+              LEFT JOIN education e ON e.person_id = p.id
+WHERE p.id = 1;</code></pre>
+<pre><code class="sql" data-sql="L12">CREATE TABLE person_doc (
+  id  INT PRIMARY KEY,
+  doc JSON NOT NULL,
+  CONSTRAINT doc_shape CHECK (JSON_SCHEMA_VALID(
+    '{"type":"object","required":["name","positions"],"properties":{"name":{"type":"string"},"positions":{"type":"array"}}}', doc)),
+  -- multi-valued index: lets MEMBER OF find people by company without scanning every document
+  KEY idx_company ((CAST(doc-&gt;'$.positions[*].company_id' AS UNSIGNED ARRAY)))
+);
+INSERT INTO person_doc VALUES
+  (1, '{"name":"Ada","positions":[{"company_id":7,"company_name":"Acme","title":"engineer"}]}');
+SELECT id FROM person_doc WHERE 7 MEMBER OF (doc-&gt;'$.positions[*].company_id');</code></pre>
+<pre><code class="sql" data-sql="L12" data-expect-error="3819">-- a document of the wrong shape is rejected by the database, not by application code
+INSERT INTO person_doc VALUES (2, '{"name": 42}');</code></pre>
+<div class="callout warn"><b class="t">Check your version</b>
+I verified these against the MySQL 8.0 manual and a MySQL 8.0.46 server. Look up your own version&rsquo;s documentation (and its support status) before relying on specifics. For DynamoDB, the AWS guidance takes the opposite starting point: with a relational database you can design normalized tables without thinking about access patterns, but DynamoDB design should start by identifying them, and it recommends keeping as few tables as possible.<sup class="c"><a href="#s6">[6]</a></sup> Lesson 17 compares them side by side.</div>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0012"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "Measured on MySQL: a full profile took 13 reads in 3 round trips normalized and 1 read as a document. Which operation did the document layout make worse?",
+  "options": [
+   "Loading the whole profile page for one person today",
+   "Renaming a company that hundreds of profiles all embed",
+   "Adding one brand new position to a single profile",
+   "Fetching a profile by its unique primary key value"
+  ],
+  "answer": 1,
+  "why": "A shared fact copied into many documents has to be rewritten in every one: 400 documents in the measurement, against one row in the normalized layout. Locality is bought with duplication."
+ },
+ {
+  "q": "Finding everyone who worked at one company took 401 reads with a multi-valued index and 20,003 without. What explains the gap?",
+  "options": [
+   "The JSON column stores documents in sorted order",
+   "Embedded company names are compressed during every scan",
+   "MySQL cannot search inside JSON arrays at all",
+   "Without an index every document must be examined"
+  ],
+  "answer": 3,
+  "why": "Searching inside documents is fine, but without an index on the array path the engine reads all 20,000 documents. The multi-valued index turns it into a lookup proportional to the answer."
+ },
+ {
+  "q": "Which engine property decides whether a many-document update can leave a half-finished state?",
+  "options": [
+   "Whether it can commit multiple documents atomically",
+   "Whether it stores data as JSON text",
+   "Whether the schema was declared before writing",
+   "Whether queries are written declaratively or imperatively"
+  ],
+  "answer": 0,
+  "why": "Torn states come from lacking an atomic multi-document commit, not from the document model itself. A MySQL JSON column inside a transaction has no such problem; a store with only single-document atomicity does."
+ },
+ {
+  "q": "Why can a normalized profile read cost more round trips than the same read from a document?",
+  "options": [
+   "Relational databases cannot return more than one row",
+   "Foreign keys force every query onto separate servers",
+   "The parts live in separate tables, fetched separately",
+   "Documents are always smaller than the equivalent rows"
+  ],
+  "answer": 2,
+  "why": "The profile's parts are in different tables, so it takes several queries or one join that repeats rows (8 rows for 4 positions x 2 educations in the measurement). A document stores the whole tree together."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: find your hottest read (15 minutes)</b></summary>
+<p>For one entity in a system you run, list its parts and the queries that touch them. Which query would turn into several round trips if the parts were separate tables, and which shared fact would turn into a fan-out if the parts were embedded? If both exist, you have found where a hybrid earns its keep.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">E. F. Codd, &ldquo;A Relational Model of Data for Large Shared Data Banks&rdquo;, CACM 13(6), 1970, pp. 377&ndash;387 (primary; doi 10.1145/362384.362685). Data independence; ordering, indexing and access-path dependence. <a href="https://web.eecs.umich.edu/~michjc/eecs584/Papers/codd_1970.pdf">PDF</a></li>
+<li id="s2">Stonebraker and Hellerstein, &ldquo;What Goes Around Comes Around&rdquo;, in <i>Readings in Database Systems</i> (4th ed.), 2005 (primary): hierarchical, network and relational eras. I read it via open PDF copies and summaries; the supplier-without-parts example is as I recall their treatment, so confirm in the text. <a href="https://courses.cs.washington.edu/courses/cse444/25wi/papers/goes-around.pdf">PDF</a></li>
+<li id="s3">Stonebraker and Pavlo, &ldquo;What Goes Around Comes Around... And Around...&rdquo;, SIGMOD Record 53(2), June 2024, doi 10.1145/3685980.3685984 (primary; <i>an argument by relational advocates</i>). <a href="https://db.cs.cmu.edu/papers/2024/whatgoesaround-sigmodrec2024.pdf">PDF</a></li>
+<li id="s4">MongoDB documentation, &ldquo;Best Practices for Data Modeling in MongoDB&rdquo; (embedding vs references; single-document write atomicity; multi-document transactions). <a href="https://mongodb.com/docs/manual/data-modeling/concepts/embedding-vs-references/">mongodb.com/docs</a></li>
+<li id="s5">MySQL 8.0 Reference Manual, &ldquo;The JSON Data Type&rdquo; and &ldquo;JSON Schema Validation Functions&rdquo;. <a href="https://dev.mysql.com/doc/refman/8.0/en/json.html">json</a> &middot; <a href="https://dev.mysql.com/doc/refman/8.0/en/json-validation-functions.html">validation</a>. Behavior reproduced on 8.0.46 in <code>experiments/mysql/json_features.sql</code>.</li>
+<li id="s6">AWS, Amazon DynamoDB Developer Guide, &ldquo;First steps for modeling relational data in DynamoDB&rdquo;. <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-modeling-nosql.html">docs.aws.amazon.com</a></li>
+<li>All &ldquo;measured&rdquo; numbers: this course&rsquo;s own experiments (<code>experiments/mysql/layout_setup.sql</code>, <code>layout_measure.sh</code>) on MySQL 8.0.46 with a small synthetic dataset. Rows read are storage-engine handler counts, not timings.</li>
+</ol>
+<div class="pager"><a href="0011-operability-and-admission-control.html">&larr; Lesson 11: Operability and admission control</a><a href="0013-many-to-many.html">Lesson 13: Many-to-many &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-layout.js"></script>
+</body></html>

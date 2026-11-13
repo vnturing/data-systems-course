@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lab: model one workload three ways · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 2 · Lesson 17</p>
+<h1>Lab: model one workload three ways</h1>
+<p class="lede">The module so far gave you costs. This lab makes you use them: one workload, a relational design, a hybrid, a DynamoDB sketch and a graph query, and a workbook that shows the workload picking the winner.</p>
+<div class="meta"><span>~60 min</span><span>1 interactive</span><span>capstone of Module 2</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Start a design from the access patterns and their frequencies, price the candidate models with the numbers you now have, name the patterns the numbers do not cover, and defend a choice in a design review.</div>
+
+<h2>1. The workload</h2>
+<p>A professional-network product. Entities: people, companies, positions (a person at a company), educations. These are the access patterns, in the form you would put in a design doc:</p>
+<table>
+<tr><th>#</th><th>Access pattern</th><th>Shape</th></tr>
+<tr><td>P1</td><td>Load a person&rsquo;s full profile page</td><td>one entity, its parts</td></tr>
+<tr><td>P2</td><td>Show a person&rsquo;s name in a list</td><td>one field</td></tr>
+<tr><td>P3</td><td>A company changes its name</td><td>shared fact</td></tr>
+<tr><td>P4</td><td>Everyone who worked at company X</td><td>reverse lookup</td></tr>
+<tr><td>P5</td><td>A person adds a position</td><td>small write</td></tr>
+<tr><td>P6</td><td>People who share a company with me</td><td>two hops</td></tr>
+<tr><td>P7</td><td>Is there a path between two people within three hops?</td><td>variable-depth traversal</td></tr>
+</table>
+
+<h2>2. Price the first five</h2>
+<p>P1 to P5 are exactly the operations in Lesson 12&rsquo;s layout lab, which was calibrated on MySQL. Set how often each occurs per day and see what the workload favors.</p>
+<div class="widget" id="sim-workbook"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>Things to try</h3>
+<ol>
+<li>Leave the defaults (profile views dominate). Which layout has the least total work, and by how much?</li>
+<li>Raise <b>renames</b> to the top setting and drop profile loads to the bottom. Does the answer flip? Then untick <b>atomic multi-document commits</b> and watch the torn-state flag appear on the embedded layout.</li>
+<li>Untick <b>reverse lookups are indexed</b> and raise reverse lookups. Which layouts are hit hardest?</li>
+<li>Find a weighting where the referenced-companies layout wins. What does that tell you about it?</li>
+</ol>
+<p>The point is not that one layout is better. It is that <b>the workload chose the layout</b>, and that three of the five inputs (rename frequency, reverse-lookup frequency, profile frequency) are numbers someone has to know. If nobody does, measuring them is the first task.</p>
+
+<h2>3. The designs</h2>
+<h3>Relational</h3>
+<p>Lesson 12&rsquo;s tables. Pattern P6 is a self-join through the position table, and it uses the index on <code>company_id</code>:</p>
+<pre><code class="sql" data-sql="L17">CREATE TABLE company  (id INT PRIMARY KEY, name VARCHAR(40) NOT NULL);
+CREATE TABLE person   (id INT PRIMARY KEY, name VARCHAR(40) NOT NULL);
+CREATE TABLE position (
+  id INT PRIMARY KEY AUTO_INCREMENT, person_id INT NOT NULL, company_id INT NOT NULL, title VARCHAR(30) NOT NULL,
+  FOREIGN KEY (person_id)  REFERENCES person(id),
+  FOREIGN KEY (company_id) REFERENCES company(id),
+  KEY idx_company (company_id, person_id)
+);
+INSERT INTO company VALUES (7,'Acme'),(8,'Globex');
+INSERT INTO person  VALUES (1,'Ada'),(2,'Grace'),(3,'Linus');
+INSERT INTO position (person_id,company_id,title) VALUES (1,7,'engineer'),(2,7,'lead'),(2,8,'advisor'),(3,8,'engineer');
+-- P6: people who share at least one company with person 1
+SELECT DISTINCT p2.person_id
+FROM position p1
+JOIN position p2 ON p2.company_id = p1.company_id AND p2.person_id &lt;&gt; p1.person_id
+WHERE p1.person_id = 1;</code></pre>
+<h3>Hybrid: relational core plus a JSON column</h3>
+<p>Keep identity and relationships relational (so foreign keys, joins and rename stay cheap), and put variable, display-only attributes in JSON. Promote the one field you filter on:</p>
+<pre><code class="sql" data-sql="L17">CREATE TABLE member (
+  id       INT PRIMARY KEY,
+  name     VARCHAR(40) NOT NULL,
+  attrs    JSON NOT NULL DEFAULT (JSON_OBJECT()),            -- variable, display-only attributes
+  country  VARCHAR(2) GENERATED ALWAYS AS (attrs-&gt;&gt;'$.country') VIRTUAL,
+  KEY idx_country (country)                                  -- the one field queries filter on
+);
+INSERT INTO member (id, name, attrs) VALUES (1,'Ada','{"country":"GB","interests":["maths","engines"]}');
+SELECT id FROM member WHERE country = 'GB';</code></pre>
+<h3>DynamoDB (a sketch, not validated here)</h3>
+<p>Start from the access patterns, not the entities, as the AWS guidance instructs.<sup class="c"><a href="#s1">[1]</a></sup> A single-table layout in the style that guidance describes might look like this (key layout only; I have not run it on DynamoDB, and the exact design should follow the AWS pages):</p>
+<table>
+<tr><th>PK</th><th>SK</th><th>Attributes</th><th>Serves</th></tr>
+<tr><td><code>PERSON#7</code></td><td><code>PROFILE</code></td><td>name, headline</td><td>P1 (query PK), P2</td></tr>
+<tr><td><code>PERSON#7</code></td><td><code>POS#2019#COMPANY#42</code></td><td>title, company name (copied)</td><td>P1, P5</td></tr>
+<tr><td><code>COMPANY#42</code></td><td><code>PROFILE</code></td><td>name</td><td>P3 (but copies elsewhere go stale)</td></tr>
+</table>
+<p>P1 is a single query on <code>PK = PERSON#7</code> that returns the profile and its positions together: the locality benefit. P4 needs a second access path (a global secondary index with company as the key). P3 now has the Lesson 12 problem: the copied name must be updated wherever it appears, and DynamoDB has no join to avoid the copy. That cost is visible in the table before you write a line of code.</p>
+<h3>Graph, for P7</h3>
+<p>&ldquo;Is there a path within three hops?&rdquo; is Lesson 15&rsquo;s variable-depth question. With people connected through companies as edges, use a bounded recursive query (or a graph engine if this is core to the product). Whatever you use, bound the hops and use a visited set, because fan-out will dominate the cost.</p>
+
+<h2>4. A design review you could defend</h2>
+<table>
+<tr><th>Pattern</th><th>What the numbers say</th><th>Recommendation (my judgment)</th></tr>
+<tr><td>P1, P2</td><td>Hot, read-heavy, one entity: a document is 1 read versus 13</td><td>Serve profile pages from a document-shaped layout (a JSON column, a cache, or a precomputed document)</td></tr>
+<tr><td>P3</td><td>Shared fact: 1 row versus hundreds of documents</td><td>Keep company as its own entity; copy the name only if a snapshot is what you want</td></tr>
+<tr><td>P4</td><td>Reverse lookup: 401 reads indexed versus 20,003 not</td><td>Index it, or keep a junction table</td></tr>
+<tr><td>P5</td><td>One write either way</td><td>Either</td></tr>
+<tr><td>P6</td><td>Not in the cost model; a two-hop join through a shared entity</td><td>Relational self-join with the composite index; measure at your data size</td></tr>
+<tr><td>P7</td><td>Fan-out compounds per hop</td><td>Bounded traversal; graph engine only if core</td></tr>
+</table>
+<p>Notice the shape of that answer. It is <b>not</b> &ldquo;use a document database&rdquo; or &ldquo;use SQL&rdquo;. It is <i>different structures for different patterns</i>, joined by a way of keeping them consistent, which brings you back to Lesson 2: derived or duplicated copies (a profile document, a graph store, a search index) are fed from the source of truth through an outbox or change capture, and the consumers must tolerate duplicates.</p>
+
+<h2>5. Three questions before you choose</h2>
+<ol>
+<li>What are the access patterns, and how often does each run? (If you do not know, measure before designing.)</li>
+<li>Which facts are shared and must change everywhere at once, and which are snapshots?</li>
+<li>Where does each rule live (Lesson 14), and what plan will the data be read with (Lesson 16): chosen by an optimizer, or by you?</li>
+</ol>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0017"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "A workload is almost all 'load the full profile' and companies are renamed almost never. Which layout does the workbook favor?",
+  "options": [
+   "Normalized tables with no copies of anything",
+   "Referenced companies held in a separate collection",
+   "Neither, since all layouts cost the same",
+   "Embedded documents with copied company names inside"
+  ],
+  "answer": 3,
+  "why": "With profile loads dominating and renames negligible, the embedded layout's one-read profile wins and its fan-out rename never matters. Change the weights and the answer changes."
+ },
+ {
+  "q": "Which access pattern is poorly captured by the lesson's cost model and points toward joins or a graph engine?",
+  "options": [
+   "Loading a single profile by primary key",
+   "Finding people connected through several shared companies",
+   "Appending one new position to a profile",
+   "Renaming a company stored in one row"
+  ],
+  "answer": 1,
+  "why": "Connectivity across shared entities is a multi-hop relationship question. The workbook prices single-entity operations, so this one needs a join or traversal and its own measurement."
+ },
+ {
+  "q": "Before choosing a data model, which input does the lesson say matters most?",
+  "options": [
+   "The list of access patterns and their frequencies",
+   "Whichever database brand your team already likes most",
+   "The total number of tables you can create",
+   "Whether the vendor calls itself relational or NoSQL"
+  ],
+  "answer": 0,
+  "why": "Every cost in this module depends on the operations and their frequencies. DynamoDB's guidance says the same: identify access patterns first."
+ },
+ {
+  "q": "In the hybrid MySQL design, what is the role of the generated column?",
+  "options": [
+   "It encrypts the JSON document to protect data",
+   "It stores a second copy of every table",
+   "It makes one JSON field an indexable column",
+   "It enforces the schema of every document written"
+  ],
+  "answer": 2,
+  "why": "A generated column exposes a field inside the JSON document as a normal column that can carry an index. Schema enforcement is the job of a CHECK constraint."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: write the pattern table for your own system (30 minutes)</b></summary>
+<p>For one service, write its access patterns in the table form above with a rough frequency for each. For the two most frequent, price the layouts you are considering using this module&rsquo;s numbers as a guide. Where the table has a pattern you cannot price, that is your first measurement.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">AWS, DynamoDB Developer Guide, &ldquo;First steps for modeling relational data in DynamoDB&rdquo; (access patterns first; few tables). <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-modeling-nosql.html">docs.aws.amazon.com</a>. The key layout above is an illustrative sketch consistent with that guidance, not copied from it.</li>
+<li>Cost numbers and the workbook: <code>assets/sim-layout.js</code>, calibrated against MySQL 8.0.46 (<code>experiments/mysql/layout_*</code>) and tested in <code>tools/test-layout.js</code>. The SQL blocks on this page were executed on MySQL 8.0.46 by <code>experiments/mysql/verify_lesson_sql.py</code>.</li>
+<li>Recommendations in section 4 are my judgment.</li>
+</ol>
+<div class="pager"><a href="0016-declarative-queries-and-optimizers.html">&larr; Lesson 16: Declarative queries</a><a href="../reference/module-2-checklist.html">Module 2 checklist &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-layout.js"></script>
+</body></html>
