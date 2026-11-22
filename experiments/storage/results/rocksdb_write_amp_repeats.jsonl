@@ -1,0 +1,12 @@
+{"label": "leveled T=10 seed=31", "n": 2000000, "user_mb": 206.0, "sst_wa": 5.4, "total_wa": 6.44, "compact_read_mb": 883.7, "levels": {"0": [2, 5.5], "1": [2, 6.7], "2": [20, 77.2], "3": [39, 138.4]}, "disk_mb": 227.8, "secs": 8.5}
+{"label": "leveled T=10 seed=32", "n": 2000000, "user_mb": 206.0, "sst_wa": 5.51, "total_wa": 6.55, "compact_read_mb": 906.7, "levels": {"1": [2, 5.5], "2": [17, 75.0], "3": [39, 147.2]}, "disk_mb": 227.7, "secs": 8.6}
+{"label": "leveled T=10 seed=33", "n": 2000000, "user_mb": 206.0, "sst_wa": 5.78, "total_wa": 6.83, "compact_read_mb": 962.9, "levels": {"1": [1, 4.1], "2": [19, 75.0], "3": [38, 148.7]}, "disk_mb": 227.8, "secs": 8.6}
+SUMMARY {"label": "leveled T=10", "sst_wa": [5.4, 5.51, 5.78], "mean": 5.56, "min": 5.4, "max": 5.78}
+{"label": "leveled T=4 seed=31", "n": 2000000, "user_mb": 206.0, "sst_wa": 5.86, "total_wa": 6.91, "compact_read_mb": 980.3, "levels": {"1": [1, 3.7], "2": [10, 31.6], "3": [34, 120.2], "4": [20, 72.3]}, "disk_mb": 227.8, "secs": 9.3}
+{"label": "leveled T=4 seed=32", "n": 2000000, "user_mb": 206.0, "sst_wa": 6.04, "total_wa": 7.09, "compact_read_mb": 1016.7, "levels": {"1": [2, 5.6], "2": [11, 28.1], "3": [37, 124.3], "4": [20, 69.7]}, "disk_mb": 227.8, "secs": 9.1}
+{"label": "leveled T=4 seed=33", "n": 2000000, "user_mb": 206.0, "sst_wa": 5.81, "total_wa": 6.85, "compact_read_mb": 968.4, "levels": {"0": [1, 1.8], "1": [3, 7.7], "2": [8, 30.6], "3": [38, 124.0], "4": [16, 63.8]}, "disk_mb": 227.8, "secs": 8.9}
+SUMMARY {"label": "leveled T=4", "sst_wa": [5.86, 6.04, 5.81], "mean": 5.9, "min": 5.81, "max": 6.04}
+{"label": "universal seed=31", "n": 2000000, "user_mb": 206.0, "sst_wa": 4.37, "total_wa": 5.42, "compact_read_mb": 672.2, "levels": {"0": [2, 9.1], "5": [23, 91.1], "6": [32, 127.6]}, "disk_mb": 227.8, "secs": 8.4}
+{"label": "universal seed=32", "n": 2000000, "user_mb": 206.0, "sst_wa": 4.02, "total_wa": 5.06, "compact_read_mb": 599.2, "levels": {"0": [3, 104.0], "6": [31, 123.9]}, "disk_mb": 227.9, "secs": 8.2}
+{"label": "universal seed=33", "n": 2000000, "user_mb": 206.0, "sst_wa": 4.17, "total_wa": 5.22, "compact_read_mb": 632.0, "levels": {"0": [2, 20.1], "5": [22, 87.5], "6": [30, 120.3]}, "disk_mb": 227.8, "secs": 8.0}
+SUMMARY {"label": "universal", "sst_wa": [4.37, 4.02, 4.17], "mean": 4.19, "min": 4.02, "max": 4.37}

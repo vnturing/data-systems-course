@@ -43,11 +43,23 @@
 - 0016 declarative vs imperative (toy planner calibrated against five MySQL configurations; 42x spread; near-tie plan flipping; estimate 3,896 vs actual 20,000)
 - 0017 lab: model one workload three ways (workbook over the layout model)
 - reference/module-2-checklist.html; experiments/mysql/ (reproduction scripts + verify_lesson_sql.py)
+- 0018 append-only log + hash index (real bytes + CRC; 1,400 randomized crash/corruption trials)
+- 0019 LSM-tree (mini LSM calibrated against real RocksDB: WA within ~8% at larger sizes)
+- 0020 compaction and the three amplifications (leveled vs size-tiered; bloom filters; peak space amp)
+- 0021 B-trees, pages and the WAL (real InnoDB: height, fill, 141x..5.4x pool curve; split crash drill with/without WAL and doublewrite)
+- 0022 B-tree vs LSM (same workload, three engines; explicit list of what was not measured)
+- reference/module-3-checklist.html; experiments/storage/ (measurements.json is the single source of truth for model tests)
+
+## Measurement lessons from Module 3 (apply to every future module)
+- A scrambled sequence (n*2654435761 mod 2^32) is NOT a random key source; it silently distorted the first B-tree numbers (76% fill / 223x became 66% / 141x). A model that shares the flaw will agree with a flawed experiment, so agreement is weak evidence.
+- Real engines are non-deterministic: record ranges across repeated runs, not single values (RocksDB WA moved 4.98 vs 5.34; leveled absent-key reads 1.3 vs 2.1 depending on 4 vs 5 sorted runs).
+- Absent-key probes must fall inside the key range; compression must be off to measure bytes; the model must be pinned to a committed measurements file so tests catch drift.
+- Say plainly what the model does NOT cover (here: latency, range scans, concurrency, tuning) and what differs between engines being compared.
 
 ## Environment note
-A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Keep doing this for Module 3 (InnoDB internals, B-tree vs LSM questions can be probed with status counters).
+A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Module 3 also used real RocksDB through `pip install rocksdict` and read InnoDB page headers straight from the .ibd file. Background processes do not survive between tool calls, so start MySQL in the same command as the experiment.
 
 ## Next up
-1. Module 3 (storage engines and indexes): append-only log + hash index, memtables/SSTables/LSM, compaction and amplification, B-trees and the WAL, B-tree vs LSM, secondary/covering/composite indexes, in-memory databases, OLTP vs OLAP, column stores, materialized views. Sources first: O'Neil et al. LSM-tree paper, Bigtable paper, RocksDB and LevelDB docs, the MySQL manual's InnoDB architecture and indexing chapters, a column-store paper (C-Store or the Abadi et al. survey). Probe InnoDB on the real server (page reads, buffer pool and redo counters).
-2. Fill the RESOURCES.md Gaps before writing.
+1. Module 3, second half (Lessons 23 to 27): secondary/covering/composite indexes with EXPLAIN on the real MySQL; in-memory databases and durability (Redis persistence modes, real fsync behavior); OLTP vs OLAP; column storage, compression, vectorized execution (can be measured with Parquet/DuckDB if pip-installable and with MySQL for the row-store side); materialized views and data cubes. Sources first (see RESOURCES.md Gaps).
+2. Then Module 4 (encoding and evolution).
 3. Lessons learned this patch: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. Three times across the last two patches (jitter, Kafka disk loss, fan-out) the fix was a better experiment, not a tuned parameter.

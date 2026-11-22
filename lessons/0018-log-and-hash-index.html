@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>The simplest database · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 18</p>
+<h1>The world&rsquo;s simplest database: an append-only log and a hash index</h1>
+<p class="lede">Before B-trees and LSM-trees, there is a design small enough to hold in your head, and every later structure is a response to one of its limits.</p>
+<div class="meta"><span>~40 min</span><span>1 interactive</span><span>1,400 randomized crash tests</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Explain how a log-structured hash store works, what it makes cheap (writes and point reads), what it costs (space until a merge, memory for every key, no range queries), and exactly how it recovers from a crash in the middle of a write.</div>
+
+<h2>1. Start with a file you only append to</h2>
+<p>Suppose storing a key means appending a line to a file, and updating a key means appending a newer line. Writing is as cheap as it gets: no seeking, no in-place edits. Reading is the problem. To find a key you scan from the end of the file until you hit it, which takes time proportional to the file.</p>
+<p>The fix is one extra structure: an in-memory hash table mapping each key to the <i>byte offset</i> of its latest record. This is the whole design of Bitcask, the storage engine described in a short paper from Basho for its Riak database: writes append to an active data file, an in-memory hash table (the <b>keydir</b>) maps each key to the file, offset and size of its latest value, and a read needs at most one disk seek.<sup class="c"><a href="#s1">[1]</a></sup> A delete appends a <b>tombstone</b>, a special record meaning &ldquo;this key is gone&rdquo;.<sup class="c"><a href="#s1">[1]</a></sup></p>
+
+<h2>2. Real bytes, so recovery is real</h2>
+<p>I built this in the browser with actual bytes rather than a diagram. Each record is laid out as a checksum, a type, the key and value lengths, the key, and the value. A read looks up the offset and decodes the record. A write appends one. Nothing else.</p>
+<div class="widget" id="sim-log"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>Overwrites pile up.</b> With 6 writes per key the log is about 6&times; larger than the live data (space amplification). Old versions are dead but still on disk.</li>
+<li><b>A merge fixes it.</b> Click <i>Merge</i>: only live records are rewritten into a fresh log, space amplification drops to 1.0, and tombstones disappear because the whole log was rewritten. The merge itself costs I/O: it reads the entire old log and writes the live data. Reclaiming space is not free, and the &ldquo;write amplification&rdquo; figure rises after it.</li>
+<li><b>The index costs memory per <i>key</i>.</b> The memory column uses a placeholder of ~47 bytes per entry (my parameter, not a measurement of any real engine). Whatever the constant, the design needs memory proportional to the number of keys, which the Bitcask paper states as its main constraint.<sup class="c"><a href="#s1">[1]</a></sup></li>
+<li><b>Now crash it.</b> Drag the crash slider. It keeps only the first <i>n</i> bytes of the log, as if the machine died mid-append. Recovery scans from the start, checks each record&rsquo;s checksum, and stops at the first incomplete or corrupt record.</li>
+</ol>
+
+<h2>3. Why recovery stops where it stops</h2>
+<p>Records are variable-length: where record <i>n+1</i> begins is read from the header of record <i>n</i>. If a record is torn (only part of it reached the disk) or damaged, nothing after it can be trusted, because you cannot know where the next one starts. So recovery accepts the longest valid prefix and discards the rest. The guarantee is exactly that: after a crash at <i>any</i> byte, the recovered state equals the state after the last <b>complete</b> record.</p>
+<p>That claim is easy to state and easy to get subtly wrong, so I tested it rather than trusting it. The course&rsquo;s test truncates the log at random byte offsets and flips random bits inside random records, then checks the recovered state against a reference. It ran <b>1,400 randomized trials</b> across 40 random operation sequences, and every one recovered correctly (<code>tools/test-log.js</code>). This is the same crash-point thinking as Lesson 2, applied to a single file.</p>
+
+<h2>4. What this design is good and bad at</h2>
+<table>
+<tr><th>Cheap</th><th>Expensive or impossible</th></tr>
+<tr><td>Writes: one sequential append</td><td>Space: dead versions accumulate until a merge</td></tr>
+<tr><td>Point reads: one hash lookup + one seek</td><td>Memory: every live key must be in RAM</td></tr>
+<tr><td>Crash recovery: the log is the commit record</td><td>Range queries: a hash table has no order</td></tr>
+<tr><td>Simplicity: a few hundred lines</td><td>Startup: rebuilding the index means scanning the data (Bitcask uses <i>hint files</i> to speed this up<sup class="c"><a href="#s1">[1]</a></sup>)</td></tr>
+</table>
+<p>Why append instead of updating in place? The motivating idea behind log-structured designs is that sequential writes are cheaper than scattered ones. The LSM-tree paper, which Lessons 19 and 20 build on, was written for the case of a high rate of inserts over a long period, and its trick is to defer and batch index changes so that disk writes are efficient.<sup class="c"><a href="#s2">[2]</a></sup> How big the sequential-versus-random gap is depends on the device, and I did not measure disk speeds here: this sandbox&rsquo;s storage is not representative of yours. Everything in this module is measured in <i>bytes and operations</i>, not seconds.</p>
+<p>Every structure in the rest of this module is an answer to one of the limits in the right-hand column. The LSM-tree keeps appending but sorts the data to get range scans and to remove the all-keys-in-memory limit. The B-tree gives up appending to update pages in place.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0018"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "In an append-only log with an in-memory hash index, what does a read cost?",
+  "options": [
+   "One hash lookup and one seek to the offset",
+   "A scan of the entire log from the end",
+   "A binary search over every sorted data file present",
+   "Several page reads proportional to the index tree height"
+  ],
+  "answer": 0,
+  "why": "The hash index holds each key's offset, so a read is a memory lookup plus one seek. That is the design's main appeal, and the reason every key must fit in memory."
+ },
+ {
+  "q": "A log holds 10 live keys and 500 records in total, because keys were overwritten many times. How large is it compared with the live data?",
+  "options": [
+   "About 5 times larger",
+   "About 10 times larger",
+   "About 50 times larger",
+   "About 500 times larger"
+  ],
+  "answer": 2,
+  "why": "500 records on disk and 10 live ones is a ratio of 50. A merge rewrites only the live records and brings the ratio back to about 1."
+ },
+ {
+  "q": "Why does recovery stop at the first record whose checksum fails?",
+  "options": [
+   "Later records are always newer, so skipping loses nothing",
+   "Checksums are only stored for the final record written",
+   "The hash index cannot hold more than one key",
+   "Record boundaries after a damaged record cannot be trusted"
+  ],
+  "answer": 3,
+  "why": "Records are variable-length and found by reading lengths from headers. Once one record is damaged, where the next begins is unknowable, so the scan stops and the tail is discarded."
+ },
+ {
+  "q": "Which limit does a log-structured hash store inherit from its in-memory index?",
+  "options": [
+   "It cannot store values larger than one kilobyte",
+   "Every key must fit in memory at once",
+   "It cannot append records faster than readers scan",
+   "It must rewrite the whole file on delete"
+  ],
+  "answer": 1,
+  "why": "The index maps every live key to a disk location, so memory grows with the number of keys, not the size of the values. Range queries are also unavailable because a hash has no order."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: build the smallest version yourself (30 minutes)</b></summary>
+<p>In any language: append <code>key,value</code> lines to a file, keep a dictionary of key &rarr; byte offset, and implement <code>get</code> by seeking. Then truncate the file at a random byte and rebuild the dictionary by scanning. Without a checksum, can you tell a torn last line from a complete one? That question is why the record has a CRC.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">Basho Technologies, &ldquo;Bitcask: A Log-Structured Hash Table for Fast Key/Value Data&rdquo; (2010; primary). Active data file, keydir, one seek per read, tombstones, merging, hint files, keys-in-memory constraint. <a href="https://sources.debian.org/src/erlang-bitcask/2.0.8%2Bdfsg-2/doc/bitcask-intro.pdf">bitcask-intro.pdf</a></li>
+<li id="s2">P. O&rsquo;Neil, E. Cheng, D. Gawlick, E. O&rsquo;Neil, &ldquo;The Log-Structured Merge-Tree (LSM-Tree)&rdquo;, Acta Informatica 33, 1996 (primary; doi 10.1007/s002360050048). <a href="https://dsf.berkeley.edu/cs286/papers/lsm-acta1996.pdf">PDF</a></li>
+<li>The log model (<code>assets/sim-log.js</code>) is this course&rsquo;s own: real bytes with CRC32, tested by <code>tools/test-log.js</code>. The per-key memory figure is a stated parameter, not a measurement.</li>
+</ol>
+<div class="pager"><a href="0017-lab-model-one-workload.html">&larr; Lesson 17: Lab</a><a href="0019-lsm-trees.html">Lesson 19: LSM-trees &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-log.js"></script>
+</body></html>

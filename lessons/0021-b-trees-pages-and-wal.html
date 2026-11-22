@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B-trees, pages and the write-ahead log · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 21</p>
+<h1>B-trees, pages, and the write-ahead log</h1>
+<p class="lede">The B-tree updates pages in place. That makes reads predictable and writes dependent on one thing: whether the page you need is already in memory.</p>
+<div class="meta"><span>~60 min</span><span>2 interactives</span><span>real InnoDB measurements</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Predict a B-tree&rsquo;s height from its size, explain why a lookup touches exactly that many pages, explain why random-key inserts get dramatically more expensive once the tree outgrows the buffer pool, and explain what the write-ahead log and the doublewrite buffer each protect against.</div>
+
+<h2>1. A tree of pages</h2>
+<p>Bayer and McCreight&rsquo;s 1972 paper introduced B-trees as a way to organize large ordered indexes, with each node a disk page holding many keys, so that the tree is shallow and the cost of finding a key is the number of levels.<sup class="c"><a href="#s1">[1]</a></sup> Databases use the variant with all records in the leaf level and internal pages holding only keys and child pointers (the B<sup>+</sup>-tree; Comer&rsquo;s 1979 survey, &ldquo;The Ubiquitous B-Tree&rdquo;, is the classic overview<sup class="c"><a href="#s2">[2]</a></sup>). In InnoDB, indexes are B-trees whose records live in leaf pages, and the default page size is 16 KB.<sup class="c"><a href="#s3">[3]</a></sup> The table itself is the clustered primary-key index.</p>
+<p>I measured a real InnoDB 8.0.46 by reading the page headers directly out of the table&rsquo;s <code>.ibd</code> file, for tables of an <code>INT</code> key and a 100-byte column loaded in key order:</p>
+<table>
+<tr><th>Rows</th><th>Height</th><th>Leaf pages</th><th>Records per leaf</th><th>Leaf fill</th><th>Pages touched by a warm point lookup</th></tr>
+<tr><td>1,000</td><td>2</td><td>9</td><td>111</td><td>84%</td><td>2</td></tr>
+<tr><td>10,000</td><td>2</td><td>82</td><td>122</td><td>93%</td><td>2</td></tr>
+<tr><td>100,000</td><td>2</td><td>814</td><td>123</td><td>93%</td><td>2</td></tr>
+<tr><td>1,000,000</td><td>3</td><td>8,131 (+8 internal, +1 root)</td><td>123</td><td>93%</td><td>3</td></tr>
+</table>
+<p>Two facts follow. A lookup touches <b>exactly as many pages as the tree is tall</b> (measured on 10 different keys per table: always 2, 2, 2, 3). And the tree is very shallow: each internal page here has about a thousand children, so height 2 holds on the order of 10<sup>5</sup> rows and height 3 on the order of 10<sup>8</sup>. That is arithmetic from the measured per-page numbers, bracketed by the two measurements above; longer keys mean fewer children per page and a taller tree sooner. My B+tree model reproduces every leaf count and height in the table exactly (<code>tools/test-btree.js</code>).</p>
+<p>The manual describes how full pages end up: about 15/16 full when records arrive in key order, between 1/2 and 15/16 when they arrive randomly.<sup class="c"><a href="#s3">[3]</a></sup> Measured: <b>93% sequential, 66% random</b> (85 records per leaf instead of 123, so about 1.4&times; as many leaf pages for the same rows (2,363 against 1,682 for 200,000 rows)).</p>
+
+<h2>2. What a write costs depends on the buffer pool</h2>
+<p>Inserting a record modifies one leaf page in memory. The page reaches disk when it is evicted or flushed. If the same leaf absorbs many inserts before being written, the write cost per record is tiny. If every insert touches a different leaf that is not in memory, each one drags in a page and pushes out a dirty one.</p>
+<div class="widget" id="sim-btree"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>I measured exactly this on InnoDB: insert 200,000 rows with random keys into a table of about 37 MB while varying the buffer pool. &ldquo;Physical&rdquo; counts everything written to disk (data pages, doublewrite pages, and redo log) relative to the 21.6 MB of row data:</p>
+<table>
+<tr><th>Buffer pool</th><th>Page writes</th><th>Physical &divide; logical</th></tr>
+<tr><td>8 MB (22% of the table)</td><td>97,051 to 97,718</td><td><b>140 to 141&times;</b></td></tr>
+<tr><td>16 MB (43%)</td><td>48,771 to 48,958</td><td>72&times;</td></tr>
+<tr><td>32 MB (86%)</td><td>7,421 to 7,960</td><td>13&times;</td></tr>
+<tr><td>128 MB (346%)</td><td>2,773 to 2,926</td><td><b>5.2 to 5.4&times;</b></td></tr>
+</table>
+<p>Same data, same query, a 26-fold difference in bytes written, set entirely by whether the leaves fit in cache. With keys in order the pool barely matters (3.0 to 3.8&times; at 128 MB, 4.3 to 4.6&times; at 8 MB), because inserts only ever touch the rightmost leaf. At the large pool the 5.4&times; is made of about 2.2&times; data pages, 0.75&times; doublewrite pages, and 2.5&times; redo log: the log is the largest single component.</p>
+<p>The lab&rsquo;s model reproduces the shape and the sequential behavior, but it <b>underestimates real InnoDB by 11% to 63%</b> (ratios 0.89, 0.74, 0.37 and 0.80 at the four sizes). It is an ideal LRU cache; InnoDB also flushes dirty pages in the background and loses some pool to other uses, which I did not model. Treat the model as a lower bound.</p>
+<div class="callout"><b class="t">A measurement mistake worth learning from</b>
+My first &ldquo;random key&rdquo; experiment used <code>n &times; 2654435761 mod 2<sup>32</sup></code> to scramble sequential numbers. It looks random but is a <b>low-discrepancy sequence</b>: successive keys land evenly spread across the key space, so leaves fill and split in lockstep and the cache is swept cyclically, which LRU handles pathologically. It gave 76% leaf fill and 223&times; at 8 MB, flattering to neither theory nor reality. Replacing it with a hash (the first 12 hex digits of MD5) gave the numbers above (66% and 141&times;). The model had agreed with the flawed experiment because it used the same sequence, which is exactly why agreement alone proves little. The course&rsquo;s tests include the pitfall (<code>tools/test-btree.js</code>).</div>
+
+<h2>3. Why a B-tree needs a log</h2>
+<p>A page split changes <b>three pages</b>: the new leaf, the shortened old leaf, and the parent. Disks do not write three pages atomically. The drill below crashes a split after each write, and also in the middle of a write (a torn page), under three regimes.</p>
+<div class="widget" id="sim-wal"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>With no log the damage depends on write order, and both orders are bad.</b> Writing the new leaf first leaves the tree corrupt at 3 of 8 crash points; writing the parent first, 5 of 8 (dangling pointers or lost keys).</li>
+<li><b>A write-ahead log fixes ordering.</b> The ARIES paper&rsquo;s core rule is that a log record describing a change must reach stable storage before the changed page is written, and a transaction is committed only once its log records are durable; combined with a steal/no-force buffer policy this lets pages be written lazily.<sup class="c"><a href="#s4">[4]</a></sup> After a crash, recovery re-applies (&ldquo;redoes&rdquo;) the logged change, so every untorn crash point recovers to a complete tree or an untouched one.</li>
+<li><b>But the log alone cannot repair a torn page.</b> Redo describes a change to a page; it needs an intact page to start from. A page half-written when the power failed has no valid starting point: 3 of 8 crash points are unrecoverable.</li>
+<li><b>The doublewrite buffer closes that gap.</b> The MySQL manual describes it: pages are written to a doublewrite area and flushed before being written to their final location, so if a crash tears the final write, a good copy can be found there during recovery.<sup class="c"><a href="#s5">[5]</a></sup> With both, none of the 8 crash points is bad. It also explains the measured doublewrite pages above: it is a real write cost paid for this safety.</li>
+</ol>
+<p>The drill is a model, not InnoDB&rsquo;s code, and it covers one kind of operation. It is Lesson 2&rsquo;s crash-point reasoning applied inside a single storage engine.</p>
+
+<h2>4. Look at your own server</h2>
+<p>These statements read the same counters I used. Take a reading, run a workload, read again, and subtract.</p>
+<pre><code class="sql" data-sql="L21">SELECT @@innodb_page_size AS page_bytes,
+       @@innodb_buffer_pool_size / 1048576 AS pool_mb,
+       @@innodb_doublewrite AS doublewrite;
+SHOW GLOBAL STATUS LIKE 'Innodb_pages_written';
+SHOW GLOBAL STATUS LIKE 'Innodb_dblwr_pages_written';
+SHOW GLOBAL STATUS LIKE 'Innodb_os_log_written';
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_read_requests';
+SHOW GLOBAL STATUS LIKE 'Innodb_buffer_pool_reads';</code></pre>
+<p><code>Innodb_buffer_pool_read_requests</code> counts page requests (what I used for pages-per-lookup); <code>Innodb_buffer_pool_reads</code> counts the ones that missed the pool and went to disk. The ratio of the two is your cache miss rate, which, as above, decides what random writes cost you.</p>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0021"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "In the InnoDB measurement, a warm point lookup touched as many pages as what?",
+  "options": [
+   "The total number of rows in the table",
+   "The total number of columns in the row",
+   "The height of the B-tree, two or three",
+   "The number of leaf pages in the tree"
+  ],
+  "answer": 2,
+  "why": "A lookup walks from the root to one leaf, touching one page per level. Measured: 2 pages for tables up to 100,000 rows, 3 for 1,000,000."
+ },
+ {
+  "q": "Random-key inserts into a B-tree much larger than its buffer pool are expensive mainly because:",
+  "options": [
+   "Each insert dirties a random leaf and evicts another",
+   "Random keys cannot be compared using a binary search",
+   "Page splits only happen for keys inserted in order",
+   "The redo log must be rewritten for every page"
+  ],
+  "answer": 0,
+  "why": "A random key lands on a random leaf, which is probably not cached. Bringing it in evicts a dirty page that must be written out, so nearly every insert costs a page write. Measured: 141x with a pool a quarter of the table, 5.4x when it fits."
+ },
+ {
+  "q": "What problem does the doublewrite buffer solve that the redo log alone cannot?",
+  "options": [
+   "Duplicate rows inserted by the application during client retries",
+   "Slow commits caused by flushing the log too often",
+   "Deadlocks between concurrent transactions that update the same page",
+   "A partially written page that redo cannot start from"
+  ],
+  "answer": 3,
+  "why": "Redo records describe changes to an intact page. If a crash tears a page in half, there is no valid page to apply them to. The doublewrite area holds a good copy to restore first."
+ },
+ {
+  "q": "With sequential inserts, InnoDB leaf pages measured about 93% full. What does the manual say?",
+  "options": [
+   "Pages are always filled completely before any splitting",
+   "Sequential inserts leave pages about fifteen-sixteenths full overall",
+   "Sequential inserts leave pages about half full overall",
+   "Pages are filled according to the key's length"
+  ],
+  "answer": 1,
+  "why": "The manual says pages fill about 15/16 when records are inserted in order and between 1/2 and 15/16 when inserted randomly. Measured: 93% sequential and 66% for random keys."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: find your miss rate (10 minutes)</b></summary>
+<p>On a server you can safely read, compute <code>Innodb_buffer_pool_reads &divide; Innodb_buffer_pool_read_requests</code> over an hour of normal traffic, and compare your working set (hot data size) with the pool. If the miss rate is high and writes are random, you are on the left of the table above.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">R. Bayer and E. McCreight, &ldquo;Organization and Maintenance of Large Ordered Indexes&rdquo;, Acta Informatica 1, 1972, pp. 173&ndash;189 (primary; doi 10.1007/BF00288683). <a href="https://link.springer.com/article/10.1007/BF00288683">springer.com</a></li>
+<li id="s2">D. Comer, &ldquo;The Ubiquitous B-Tree&rdquo;, ACM Computing Surveys 11(2), 1979 (primary; I read an excerpt, not the whole survey).</li>
+<li id="s3">MySQL 8.0 Reference Manual: &ldquo;InnoDB Startup Configuration&rdquo; (default 16 KB page size) and &ldquo;The Physical Structure of an InnoDB Index&rdquo; (B-tree leaf pages; fill of about 15/16 for sequential and between 1/2 and 15/16 for random inserts). <a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-init-startup-configuration.html">startup</a> &middot; <a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-physical-structure.html">physical structure</a></li>
+<li id="s4">C. Mohan et al., &ldquo;ARIES: A Transaction Recovery Method Supporting Fine-Granularity Locking and Partial Rollbacks Using Write-Ahead Logging&rdquo;, ACM TODS 17(1), 1992 (primary). Write-ahead rule, steal/no-force, redo and undo. <a href="https://faculty.cc.gatech.edu/~jarulraj/courses/4420-s19/papers/12-logging/aries.pdf">PDF</a></li>
+<li id="s5">MySQL 8.0 Reference Manual, &ldquo;Doublewrite Buffer&rdquo;. <a href="https://dev.mysql.com/doc/refman/8.0/en/innodb-doublewrite-buffer.html">dev.mysql.com</a></li>
+<li>Measurements: real InnoDB 8.0.46 (<code>experiments/storage/innodb_btree.sh</code>, <code>innodb_write_cost.sh</code>, <code>parse_ibd.py</code>; raw logs in <code>results/</code>). The model is <code>assets/sim-btree.js</code>; the crash drill is <code>assets/sim-wal.js</code>. Tests: <code>tools/test-btree.js</code>, <code>tools/test-wal.js</code>. The SQL block was executed on MySQL 8.0.46 by <code>experiments/mysql/verify_lesson_sql.py</code>.</li>
+</ol>
+<div class="pager"><a href="0020-compaction-and-amplification.html">&larr; Lesson 20: Compaction</a><a href="0022-btree-vs-lsm.html">Lesson 22: B-tree vs LSM &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-btree.js"></script>
+<script src="../assets/ui-storage.js"></script>
+<script src="../assets/sim-wal.js"></script>
+</body></html>

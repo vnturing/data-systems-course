@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LSM-trees · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 19</p>
+<h1>Memtables, sorted runs, and the LSM-tree</h1>
+<p class="lede">Keep the log, but sort it. That one change removes the memory limit and brings back range scans, and it creates a new problem (compaction) that fills the next lesson.</p>
+<div class="meta"><span>~50 min</span><span>1 interactive</span><span>calibrated on real RocksDB</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Trace a write and a read through a memtable, a write-ahead log and sorted runs; explain tombstones and bloom filters; and predict how write amplification grows with the number of levels.</div>
+
+<h2>1. From a log to sorted runs</h2>
+<p>Lesson 18&rsquo;s log is fast to write but unsorted, so it needs an index of every key in memory. The LSM-tree paper&rsquo;s idea is to sort in memory, write sorted batches to disk, and merge them later like a merge sort. Its abstract describes it as a disk-based structure designed for high insert rates, which defers and batches index changes, cascading them from a memory component through one or more disk components; it also says plainly that indexed finds needing immediate response can lose I/O efficiency in some cases.<sup class="c"><a href="#s1">[1]</a></sup> That honest caveat is the theme of Lesson 22.</p>
+<p>The terms most engines use come from Google&rsquo;s Bigtable paper. A write goes to a <b>commit log</b> (for durability) and to an in-memory sorted structure, the <b>memtable</b>. When the memtable reaches a threshold it is frozen and written out as an immutable sorted file, an <b>SSTable</b>, which Bigtable calls a <i>minor compaction</i>; merging compactions bound how many SSTables exist, and a <i>major compaction</i> rewrites them all into one that contains no deletion information.<sup class="c"><a href="#s2">[2]</a></sup> LevelDB&rsquo;s implementation notes describe the same flow: a log file plus a memtable, with a full memtable flushed into a level-0 file, and level-0 files may overlap each other.<sup class="c"><a href="#s3">[3]</a></sup></p>
+
+<h2>2. The write path and the read path</h2>
+<ol>
+<li><b>Write:</b> append to the write-ahead log (so the memtable survives a crash), insert into the memtable. That is all the user waits for.</li>
+<li><b>Flush:</b> when the memtable is full, write it out as a sorted, immutable file.</li>
+<li><b>Compact:</b> in the background, merge files so the number of places a key can hide stays bounded.</li>
+<li><b>Read:</b> look in the memtable, then in each sorted run from newest to oldest, stopping at the first version of the key. A run whose key range does not cover the key is skipped for free, and a <b>bloom filter</b> (a compact bit array that can say &ldquo;definitely not here&rdquo;) lets most remaining runs be skipped too. Bigtable lists bloom filters as a way to reduce disk accesses for lookups.<sup class="c"><a href="#s2">[2]</a></sup></li>
+<li><b>Delete:</b> write a tombstone. Older copies of the key sit in immutable files the delete cannot touch, so the tombstone hides them until compaction removes both.</li>
+</ol>
+
+<h2>3. Watch it run</h2>
+<p>The lab below is a real miniature LSM-tree: it keeps real sorted runs, performs real merges, and counts what it does. (It stores keys and version numbers rather than values, which does not change the counts.) I calibrated it against RocksDB, running a real RocksDB through its Python binding on the same ratios (a 4 MB memtable, an 8 MB first level, ratio 10, no compression).</p>
+<div class="widget" id="sim-lsm"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice</h3>
+<ol>
+<li><b>Write amplification grows with the number of levels.</b> Real RocksDB, leveled, random keys: 2.27 at 6 memtables of data, about 5.0 to 5.3 at 26, 5.3 to 5.8 at 52, and 6.7 to 6.8 at 103. The model gives 1.6, 4.3 to 4.5, 5.8 and 7.2: within about 8% at the two largest sizes, and 12 to 28% low at the two smallest (small runs are dominated by details the model omits). Each level a record passes through means rewriting it again.</li>
+<li><b>Keys in order are almost free.</b> Switch to &ldquo;Keys in order&rdquo;. Write amplification falls to about 1 (real: 1.06), and the &ldquo;moves without rewriting&rdquo; counter rises, because files with disjoint key ranges can simply be moved down a level.</li>
+<li><b>The ratio T barely matters here.</b> Between ratio 4 and 10 the real measurements overlap (5.5 to 6.0 vs 5.3 to 5.8 at 52 memtables, across repeated runs). A bigger ratio means fewer levels but more rewriting per level, and the two roughly cancel at this scale. Do not assume the ratio is a strong knob without measuring your own workload.</li>
+<li><b>The write-ahead log is a second write.</b> Everything above counts only the sorted files. Adding the log adds about 1 to the total (the model reports it as <code>waTotal</code>).</li>
+</ol>
+<div class="callout warn"><b class="t">Measurement noise is real</b>
+RocksDB&rsquo;s background compaction timing makes repeated runs differ even with fixed random seeds. The same configuration at 26 memtables gave 4.98 in one run and 5.34 in another, and the number of sorted runs left at the end varied between 4 and 5. I report ranges for that reason, and a single published number for leveled write amplification (secondary articles quote anything from about 5 to 30&times;) should make you ask: at what data size, ratio, and workload?</div>
+
+<h2>4. Check yourself</h2>
+<div class="quiz" data-lesson-id="0019"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "Why do keys written in sorted order cost almost no write amplification in leveled compaction?",
+  "options": [
+   "Sorted keys are compressed far better than random keys",
+   "Files never overlap, so they move down without rewriting",
+   "The write-ahead log is skipped entirely for sorted inserts",
+   "Bloom filters remove the need to merge any files"
+  ],
+  "answer": 1,
+  "why": "Compaction rewrites files to merge overlapping key ranges. When new files cover disjoint ranges there is nothing to merge, so a file is simply moved down a level. Real RocksDB measured 1.06 for sequential keys."
+ },
+ {
+  "q": "Where does a read look first in an LSM-tree?",
+  "options": [
+   "The oldest sorted file on disk",
+   "The largest level of the tree",
+   "The bloom filter of every file",
+   "The in-memory memtable, then newer files"
+  ],
+  "answer": 3,
+  "why": "Newer data shadows older data, so a read checks the memtable first and then runs from newest to oldest, stopping at the first version it finds."
+ },
+ {
+  "q": "What does a tombstone do in an LSM-tree?",
+  "options": [
+   "Marks a key deleted until compaction discards it",
+   "Immediately erases every older version from every file",
+   "Prevents the key from ever being written again",
+   "Stores the key's value in the bloom filter"
+  ],
+  "answer": 0,
+  "why": "Older copies of the key may live in files the delete cannot touch (they are immutable). The tombstone hides them from reads, and compaction removes both once no older copy can remain."
+ },
+ {
+  "q": "Measured on real RocksDB, how did leveled write amplification change as data grew from 26 MB to 412 MB?",
+  "options": [
+   "It stayed constant at about two throughout",
+   "It fell because larger files compress better",
+   "It climbed from about 2 to 7",
+   "It dropped to zero once levels existed"
+  ],
+  "answer": 2,
+  "why": "Each extra level adds another round of rewriting, so write amplification grows with the number of levels: 2.27, then about 5, then about 6.8 in the measurements."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: look at your own engine (20 minutes)</b></summary>
+<p>If you run RocksDB, LevelDB, or anything built on them, find its memtable size, level ratio, and compaction trigger, and the statistics it keeps about compaction bytes written versus bytes the application wrote. The ratio of the two is your write amplification.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">O&rsquo;Neil et al., &ldquo;The Log-Structured Merge-Tree (LSM-Tree)&rdquo;, Acta Informatica 1996 (primary). <a href="https://dsf.berkeley.edu/cs286/papers/lsm-acta1996.pdf">PDF</a></li>
+<li id="s2">Chang et al., &ldquo;Bigtable: A Distributed Storage System for Structured Data&rdquo;, OSDI 2006 (primary): commit log, memtable, SSTable, minor, merging and major compactions, bloom filters. I read it through course copies quoting sections 5.4 and 6. <a href="https://research.google.com/archive/bigtable-osdi06.pdf">PDF</a></li>
+<li id="s3">LevelDB implementation notes, <code>doc/impl.md</code> (primary; read via forks of google/leveldb). <a href="https://github.com/google/leveldb/blob/main/doc/impl.md">github.com/google/leveldb</a></li>
+<li>Measurements: real RocksDB via the <code>rocksdict</code> 0.3.29 binding (<code>experiments/storage/rocks_experiments.py</code>, raw logs in <code>results/</code>), with ranges across repeated runs in <code>measurements.json</code>. The mini LSM is <code>assets/sim-lsm.js</code>, pinned to those ranges by <code>tools/test-lsm.js</code>. Secondary articles that quote differing write-amplification figures: <a href="https://www.mintlify.com/facebook/rocksdb/guide/tuning-performance">mintlify</a>, <a href="https://martinuke0.github.io/posts/2026-05-24-deep-dive-into-rocksdb-compaction-strategies-leveled-vs-tiered-architecture-and-performance-tradeoffs/">martinuke0</a>.</li>
+</ol>
+<div class="pager"><a href="0018-log-and-hash-index.html">&larr; Lesson 18: The simplest database</a><a href="0020-compaction-and-amplification.html">Lesson 20: Compaction and amplification &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-lsm.js"></script>
+<script src="../assets/ui-storage.js"></script>
+</body></html>

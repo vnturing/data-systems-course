@@ -1,0 +1,4 @@
+N=1000 | index 312: height=2 levels={L0:9 pages, L1:1 pages} leaf_recs_avg=111 leaf_fill=84% | page requests per warm point lookup (10 keys): 2 2 2 2 2 2 2 2 2 2
+N=10000 | index 313: height=2 levels={L0:82 pages, L1:1 pages} leaf_recs_avg=122 leaf_fill=93% | page requests per warm point lookup (10 keys): 2 2 2 2 2 2 2 2 2 2
+N=100000 | index 314: height=2 levels={L0:814 pages, L1:1 pages} leaf_recs_avg=123 leaf_fill=93% | page requests per warm point lookup (10 keys): 2 2 2 2 2 2 2 2 2 2
+N=1000000 | index 315: height=3 levels={L0:8131 pages, L1:8 pages, L2:1 pages} leaf_recs_avg=123 leaf_fill=93% | page requests per warm point lookup (10 keys): 3 3 3 3 3 3 3 3 3 3

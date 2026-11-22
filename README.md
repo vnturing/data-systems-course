@@ -18,10 +18,13 @@ All links are relative, so it works under `https://<user>.github.io/<repo>/`.
 ```
 sh tools/check-all.sh       # runs every model test and the quiz lint
 ```
-Individual checks: `node tools/test-sim.js`, `test-dualwrite.js`, `test-detector.js`, `test-kafka.js`, `test-retry.js`, `test-redundancy.js`, `test-latency.js`, `test-fanout.js`, `test-queue.js`, `test-slo.js`, `test-admission.js`, `test-planner.js`, `test-graph.js`, `test-layout.js`, `test-m2m.js`, `test-schema.js`, and `python3 tools/check-quiz.py` (equal option word counts, varied answer positions).
+Individual checks: `node tools/test-sim.js`, `test-dualwrite.js`, `test-detector.js`, `test-kafka.js`, `test-retry.js`, `test-redundancy.js`, `test-latency.js`, `test-fanout.js`, `test-queue.js`, `test-slo.js`, `test-admission.js`, `test-planner.js`, `test-graph.js`, `test-layout.js`, `test-m2m.js`, `test-schema.js`, `test-log.js`, `test-wal.js`, `test-lsm.js`, `test-btree.js`, `test-ui-constants.js`, and `python3 tools/check-quiz.py` (equal option word counts, varied answer positions).
 
 ## Reproduce the MySQL measurements
 Module 2's "measured" numbers come from `experiments/mysql/` (see its README). `python3 experiments/mysql/verify_lesson_sql.py` executes every SQL block in the lessons against a local MySQL 8; it is not part of the CI check because it needs a server.
+
+## Reproduce the storage measurements
+Module 3's "measured" numbers come from `experiments/storage/` (real InnoDB and RocksDB; see its README, including the measurement mistakes kept on purpose). `measurements.json` there is what the model tests are pinned to.
 
 ## Layout
 - `index.html`, `syllabus.html`: entry points

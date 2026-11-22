@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compaction and amplification · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 20</p>
+<h1>Compaction strategies and the three amplifications</h1>
+<p class="lede">Compaction is where an LSM-tree pays for its fast writes. The strategy you choose decides who pays: the disk bandwidth, the disk capacity, or the reader.</p>
+<div class="meta"><span>~50 min</span><span>1 interactive</span><span>calibrated on real RocksDB</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Define write, read and space amplification, predict which compaction strategy suits a workload, explain what bloom filters and caches change, and say why disk headroom matters for tiered compaction.</div>
+
+<h2>1. Three numbers</h2>
+<ul>
+<li><b>Write amplification:</b> bytes physically written &divide; bytes the application wrote.</li>
+<li><b>Read amplification:</b> disk reads needed per lookup.</li>
+<li><b>Space amplification:</b> bytes on disk &divide; bytes of live data.</li>
+</ul>
+<p>They trade against each other. The RUM conjecture states this: Athanassoulis and colleagues define read, update and memory overheads for an access method and conjecture that optimizing along two of them negatively impacts the third.<sup class="c"><a href="#s1">[1]</a></sup> It is a conjecture, not a theorem, which is a useful reminder to measure instead of assuming. The three strategies below are three different places to stand on that triangle.</p>
+
+<h2>2. Two ways to compact</h2>
+<p><b>Leveled.</b> Levels have exponentially growing target sizes (RocksDB&rsquo;s documentation describes a size multiplier between levels, 10 by default<sup class="c"><a href="#s2">[2]</a></sup>); within a level, files do not overlap. A lookup consults at most one file per level plus the overlapping files in level 0. Compaction picks a file and merges it with the overlapping files one level down, rewriting data repeatedly as it descends, which is write amplification.</p>
+<p><b>Size-tiered.</b> Runs accumulate; when several of similar size exist they are merged into one bigger run. Data is rewritten less often (roughly once per tier), but many overlapping runs coexist, so reads consult more of them and dead versions linger longer.</p>
+<p>My mini-LSM implements classic size-tiered compaction (as used by Cassandra), which is <b>not</b> the same algorithm as RocksDB&rsquo;s &ldquo;universal&rdquo; style: universal also triggers large merges to bound space amplification and keeps runs in age order so a read can stop at the first match. I show real universal numbers next to the model&rsquo;s size-tiered ones, and they agree on direction but not on every magnitude.</p>
+
+<h2>3. Measure it</h2>
+<p>The lab runs three workloads against four policies. Choose a workload, toggle bloom filters, and set a cache.</p>
+<div class="widget" id="sim-compaction"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>Here is what real RocksDB did on the same shapes, with the range across repeated runs (compression off, 108-byte records, 4 MB memtable):</p>
+<table>
+<tr><th>Measurement (real RocksDB)</th><th>Leveled</th><th>Universal (tiered)</th></tr>
+<tr><td>Write amp., random inserts (52 memtables of data)</td><td>5.3 to 5.8</td><td>4.0 to 5.2</td></tr>
+<tr><td>Write amp., update-heavy (each key written 5 times)</td><td>4.6 to 4.9</td><td>3.8 to 4.0</td></tr>
+<tr><td>Space amp. after the update-heavy run</td><td>1.19 to 1.27</td><td>1.62 to 1.82</td></tr>
+<tr><td>Disk reads, absent key, no filter (8 MB cache over ~55 MB)</td><td>1.3 to 2.1</td><td>3.3</td></tr>
+<tr><td>Disk reads, absent key, with 10-bit filter</td><td>0.011</td><td>0.03 to 0.04</td></tr>
+<tr><td>Disk reads, present key, with filter</td><td>0.87</td><td>0.88 to 0.89</td></tr>
+</table>
+<h3>What to notice</h3>
+<ol>
+<li><b>Tiered writes less and stores more.</b> On the update-heavy workload the model&rsquo;s write amplification is about 2 to 3 for tiered against 4.6 to 4.8 for leveled, matching the real direction. The price is space: <b>peak</b> space amplification of 3.1 to 3.9&times; for tiered against about 1.3 for leveled. Real universal ended at 1.6 to 1.8. You provision disks for the peak, which is why the lab reports it.</li>
+<li><b>Bloom filters collapse absent-key reads.</b> Untick and tick the filter box: absent-key reads fall by more than 20&times; for every policy. The filter has no effect on a <i>present</i> key, which still needs the block that holds it (about 0.9 disk reads when most of the data is not cached). The filter&rsquo;s false-positive rate in the model measured 0.96% against a theoretical 0.8% for 10 bits per key.</li>
+<li><b>More runs, more reads.</b> The &ldquo;merge at 6 runs&rdquo; policy ends with 10 sorted runs and needs about 8 reads per lookup without filters. Real universal sat at 4 runs and 3.3 reads. Fewer, larger runs help readers.</li>
+<li><b>The cache hides the small runs.</b> The model assumes the smallest runs live in cache first, as the real measurement&rsquo;s cache (8 MB) covered the two smallest levels. A bigger cache lowers reads without touching write cost.</li>
+<li><b>Keys in order change everything.</b> Choose the third workload. Leveled compaction approaches 1&times; because nothing overlaps (Lesson 19). The model&rsquo;s tiered policy still merges disjoint runs and stays near 3&times;; I did not measure real universal on sequential keys, so treat that row as a property of the textbook policy, not of RocksDB.</li>
+</ol>
+<div class="callout warn"><b class="t">Do not generalize one number</b>
+RocksDB&rsquo;s own &ldquo;dynamic level bytes&rdquo; option (levels sized from the bottom up to bound space amplification<sup class="c"><a href="#s2">[2]</a></sup>) changed space amplification only from 1.19 to 1.14 in this test. Across repeated runs the leveled absent-key read cost ranged from 1.3 to 2.1 because the final layout had 4 or 5 sorted runs. Every figure here depends on data size, key pattern, cache, and run-to-run timing.</div>
+
+<h2>4. Choosing (my synthesis)</h2>
+<table>
+<tr><th>If&hellip;</th><th>Lean toward</th><th>Because</th></tr>
+<tr><td>Many overwrites; disk is tight</td><td>Leveled</td><td>Dead versions are reclaimed quickly (1.2&times; space)</td></tr>
+<tr><td>Write bandwidth or device wear is the constraint and disk is plentiful</td><td>Tiered</td><td>About 15% to 25% fewer bytes written in the real measurements (the textbook size-tiered model shows up to half)</td></tr>
+<tr><td>Reads of absent keys are common</td><td>Bloom filters, either strategy</td><td>Absent-key reads drop from 1 to 3 to near 0.01</td></tr>
+<tr><td>You cannot test with your data</td><td>Do not pick yet</td><td>Every number above moved between runs and configurations</td></tr>
+</table>
+
+<h2>5. Check yourself</h2>
+<div class="quiz" data-lesson-id="0020"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "Which pairing matches the measured RocksDB result on an update-heavy workload?",
+  "options": [
+   "Tiered writes less but uses noticeably more disk space",
+   "Leveled writes less and also uses more disk space",
+   "Both strategies write the same and use identical space",
+   "Tiered writes more but uses noticeably less disk space"
+  ],
+  "answer": 0,
+  "why": "Universal (tiered) compaction wrote 3.8 to 4.0 times the user bytes against 4.6 to 4.9 for leveled, but left 1.6 to 1.8 times the live data on disk against 1.2 to 1.3. Write cost and space cost trade against each other."
+ },
+ {
+  "q": "What does a 10-bit bloom filter do for a lookup of an absent key?",
+  "options": [
+   "Makes the key present in the nearest memtable",
+   "Guarantees zero reads, with absolutely no possible exceptions",
+   "Doubles the number of runs that are consulted",
+   "Skips almost all runs, with ~1% false positives"
+  ],
+  "answer": 3,
+  "why": "The filter says 'definitely not here' for nearly every run. About 1% of the time it says 'maybe' for a key that is absent, which costs one wasted read. Measured: 1.3 to 2.1 reads without a filter, about 0.01 with one."
+ },
+ {
+  "q": "The RUM conjecture says that an access method that optimizes two of read, update and memory overhead will:",
+  "options": [
+   "Always optimize the third overhead as well automatically",
+   "Pay for it with a worse third overhead",
+   "Become identical to every other access method used",
+   "Eliminate the need for any storage at all"
+  ],
+  "answer": 1,
+  "why": "RUM is a conjecture that the three overheads trade against each other: improving two tends to hurt the third. Compaction strategy, bloom filters and caches are ways of choosing where to pay."
+ },
+ {
+  "q": "Why did the lesson report peak rather than final space amplification for size-tiered compaction?",
+  "options": [
+   "Final values are always larger than the peak ones",
+   "Disks are always provisioned for the average usage level",
+   "It swings widely while running, and disks need headroom",
+   "Peak values are easier to compute than final values"
+  ],
+  "answer": 2,
+  "why": "A tiered store's space use jumps as runs accumulate and are merged. In the lab it ranged from about 1.0 to nearly 4 times the live data, so the end-of-run number understates what you must provision."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: check your headroom (15 minutes)</b></summary>
+<p>For an LSM-based store you run, find its compaction style, the free disk it needs to compact (a full-size merge temporarily needs room for old and new files), and its disk-usage graph. Does the graph show sawtooth swings? The height of the teeth is your space-amplification peak.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">M. Athanassoulis et al., &ldquo;Designing Access Methods: The RUM Conjecture&rdquo;, EDBT 2016 (primary). <a href="https://stratos.seas.harvard.edu/publications/designing-access-methods-rum-conjecture">stratos.seas.harvard.edu</a></li>
+<li id="s2">RocksDB blog, &ldquo;Dynamic Level Size for Level-Based Compaction&rdquo; (primary). <a href="https://rocksdb.org/blog/2015/07/23/dynamic-level.html">rocksdb.org</a>. The default ratio of 10 and the description of level sizing are from this page; I did not read RocksDB&rsquo;s universal-compaction documentation, so the description of universal above comes from observed behavior and secondary summaries.</li>
+<li>Measurements: real RocksDB (<code>rocksdict</code> 0.3.29), ranges across repeated runs in <code>experiments/storage/measurements.json</code>; the model in <code>assets/sim-lsm.js</code>, tested against those ranges by <code>tools/test-lsm.js</code>. The bloom filter is a real implementation (<code>tools/test-lsm.js</code> checks no false negatives and a false-positive rate near the theory).</li>
+</ol>
+<div class="pager"><a href="0019-lsm-trees.html">&larr; Lesson 19: LSM-trees</a><a href="0021-b-trees-pages-and-wal.html">Lesson 21: B-trees, pages and the log &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-lsm.js"></script>
+<script src="../assets/ui-storage.js"></script>
+</body></html>

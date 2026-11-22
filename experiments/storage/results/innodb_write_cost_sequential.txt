@@ -1,0 +1,2 @@
+sequential pool=128MB | index 316: height=3 levels={L0:1682 pages, L1:3 pages, L2:1 pages} leaf_recs_avg=119 leaf_fill=93% | pages_written=1774 dblwr_pages=200 redo_bytes=33203712 physical_over_logical=3.0
+sequential pool=8MB | index 317: height=3 levels={L0:1682 pages, L1:3 pages, L2:1 pages} leaf_recs_avg=119 leaf_fill=93% | pages_written=2081 dblwr_pages=1997 redo_bytes=33228800 physical_over_logical=4.6

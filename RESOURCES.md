@@ -90,6 +90,29 @@ Verification status: entries below were located and checked via web search on 20
   Primary-adjacent. Implicit schema. Verified via search excerpts. Use for: Lesson 14.
 - Standards, verified only through secondary explanations: ISO/IEC 39075:2024 (GQL) and ISO/IEC 9075-16:2023 (SQL/PGQ). Use for: Lesson 15. Whether MySQL supports SQL/PGQ was NOT verified.
 
+### Added 2026-11-13 (Module 3, Lessons 18 to 22)
+
+- [Paper: The Log-Structured Merge-Tree (LSM-Tree), O'Neil, Cheng, Gawlick, O'Neil, Acta Informatica 33, 1996](https://dsf.berkeley.edu/cs286/papers/lsm-acta1996.pdf) (doi 10.1007/s002360050048)
+  Primary; abstract and Berkeley PDF copy located. Defers and batches index changes; states that finds needing immediate response can lose I/O efficiency. Not read end to end. Use for: Lessons 18, 19.
+- [Paper: Bigtable, Chang et al., OSDI 2006](https://research.google.com/archive/bigtable-osdi06.pdf)
+  Primary. Memtable, SSTable, minor/merging/major compactions, bloom filters, verified through course copies quoting sections 5.4 and 6; the research.google.com URL is the standard archive link and was not itself fetched. Use for: Lesson 19.
+- [Paper: Bitcask, A Log-Structured Hash Table for Fast Key/Value Data, Basho, 2010](https://sources.debian.org/src/erlang-bitcask/2.0.8%2Bdfsg-2/doc/bitcask-intro.pdf)
+  Primary (Debian source copy). Keydir, one seek per read, tombstones, merge, hint files, keys-in-memory constraint. Use for: Lesson 18.
+- [Notes: LevelDB doc/impl.md](https://github.com/google/leveldb/blob/main/doc/impl.md)
+  Primary; read via forks. Log + memtable, level-0 files may overlap. Use for: Lesson 19.
+- [Blog: Dynamic Level Size for Level-Based Compaction, RocksDB](https://rocksdb.org/blog/2015/07/23/dynamic-level.html)
+  Primary. Level sizing. The default multiplier of 10 was taken from this page's excerpt. RocksDB's universal-compaction documentation was NOT read. Use for: Lesson 20.
+- [Paper: Designing Access Methods: The RUM Conjecture, Athanassoulis et al., EDBT 2016](https://stratos.seas.harvard.edu/publications/designing-access-methods-rum-conjecture)
+  Primary abstract. A conjecture, presented as one. Use for: Lessons 20, 22.
+- [Paper: Organization and Maintenance of Large Ordered Indexes, Bayer and McCreight, Acta Informatica 1, 1972](https://link.springer.com/article/10.1007/BF00288683) and [The Ubiquitous B-Tree, Comer, ACM Computing Surveys 11(2), 1979]
+  Primary; Bayer-McCreight located via the Springer record, Comer via an excerpt only. Use for: Lesson 21.
+- [Paper: ARIES, Mohan et al., ACM TODS 17(1), 1992](https://faculty.cc.gatech.edu/~jarulraj/courses/4420-s19/papers/12-logging/aries.pdf)
+  Primary. WAL rules, steal/no-force, analysis/redo/undo. Use for: Lesson 21.
+- [Manual: MySQL 8.0, InnoDB startup configuration, physical structure of an index, doublewrite buffer](https://dev.mysql.com/doc/refman/8.0/en/innodb-doublewrite-buffer.html)
+  Primary. 16 KB default page; fill of about 15/16 (sequential) and 1/2 to 15/16 (random); doublewrite protects against torn pages. The 15/16 and 1/2 statements were seen in the Japanese edition of the manual page; the English page was not fetched. Use for: Lesson 21.
+- Secondary, shown only as a caution that published RocksDB write-amplification figures disagree (about 5x to 30x): mintlify.com/facebook/rocksdb/guide/tuning-performance; martinuke0.github.io posts on RocksDB compaction (May 2026). Use for: Lesson 19.
+- Own measurements: `experiments/storage/measurements.json` and `results/` (real InnoDB 8.0.46 and RocksDB via rocksdict 0.3.29).
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -104,6 +127,9 @@ Verification status: entries below were located and checked via web search on 20
 - Kleppmann and Riccomini, Designing Data-Intensive Applications, 2nd ed. (O'Reilly, 2026): mentioned in Cambridge Databases notes. This course is inspired by the topic space, not a copy of any chapter.
 
 ## Gaps
+
+- Module 3 follow-ups: RocksDB universal-compaction docs; the full Bigtable and LSM-tree papers; the English MySQL manual pages for index fill and the doublewrite buffer; Kafka's log segment and index layout (Lesson 22 points to it without verifying); MyRocks documentation; a primary source on SSD write amplification and sequential-vs-random cost for the hardware discussion that this module deliberately left unmeasured.
+- Sources still needed for Lessons 23 to 27: MySQL manual chapters on secondary, covering and composite indexes and the optimizer's index use; Redis persistence docs (RDB, AOF) and a research paper on main-memory databases (e.g. H-Store/VoltDB); Stonebraker et al. 'One Size Fits All' and a data-warehousing reference (Kimball/Inmon) for OLTP vs OLAP; C-Store (Stonebraker et al., VLDB 2005) and the Abadi et al. column-store survey; Parquet format docs; Gupta and Mumick on materialized views; a data cube paper (Gray et al.).
 
 - Module 2 follow-ups: MySQL 8.4 LTS / 9.x behavior of the features used (JSON validation, multi-valued indexes, hash join, EXPLAIN ANALYZE); the DynamoDB adjacency-list and GSI pages; the full Stonebraker/Pavlo benchmark tables; the Neo4j/Cypher manual for the variable-length path syntax shown as a sketch; histogram statistics in MySQL (column statistics) for the correlated-predicates discussion; Mongo document size limit and MySQL's JSON size limit.
 

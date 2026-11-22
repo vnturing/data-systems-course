@@ -45,17 +45,18 @@
 
 <div class="module"><div class="part">Part I</div><h3>Module 3 · Storage engines and indexes</h3>
 <ol start="18">
-<li class="status-planned">The world's simplest database: an append-only log and a hash index</li>
-<li class="status-planned">Memtables, SSTables and the LSM-tree</li>
-<li class="status-planned">Compaction strategies; read, write and space amplification <span class="why">&mdash; predict where an LSM store will hurt</span></li>
-<li class="status-planned">B-trees, pages and the write-ahead log</li>
-<li class="status-planned">B-tree vs LSM: a decision framework, not a religion</li>
+<li data-lesson-id="0018"><a href="lessons/0018-log-and-hash-index.html">The world's simplest database: an append-only log and a hash index</a> <span class="status-built">built</span> <span class="why">&mdash; real bytes, CRC recovery, 1,400 randomized crash tests</span></li>
+<li data-lesson-id="0019"><a href="lessons/0019-lsm-trees.html">Memtables, sorted runs and the LSM-tree</a> <span class="status-built">built</span> <span class="why">&mdash; miniature LSM calibrated against real RocksDB</span></li>
+<li data-lesson-id="0020"><a href="lessons/0020-compaction-and-amplification.html">Compaction strategies and the three amplifications</a> <span class="status-built">built</span> <span class="why">&mdash; leveled vs tiered, bloom filters, the RUM trade-off</span></li>
+<li data-lesson-id="0021"><a href="lessons/0021-b-trees-pages-and-wal.html">B-trees, pages and the write-ahead log</a> <span class="status-built">built</span> <span class="why">&mdash; measured on real InnoDB: height, fill, and a 26x write-cost swing</span></li>
+<li data-lesson-id="0022"><a href="lessons/0022-btree-vs-lsm.html">B-tree or LSM? A decision framework you can test</a> <span class="status-built">built</span> <span class="why">&mdash; same workload, three engines; what we did not measure</span></li>
 <li class="status-planned">Secondary, covering and composite indexes; reading an EXPLAIN plan</li>
 <li class="status-planned">In-memory databases and what durability then means</li>
 <li class="status-planned">OLTP vs OLAP; warehouses and why they're separate</li>
 <li class="status-planned">Column storage, compression, vectorized execution</li>
 <li class="status-planned">Materialized views and data cubes</li>
-</ol></div>
+</ol>
+<p style="font-family:var(--sans);font-size:.82rem;margin:.6rem 0 0"><a href="reference/module-3-checklist.html">Module 3 structures, numbers and procedures</a> &middot; <a href="experiments/storage/README.md">Storage experiments</a></p></div>
 
 <div class="module"><div class="part">Part I</div><h3>Module 4 · Encoding and evolution</h3>
 <ol start="28">

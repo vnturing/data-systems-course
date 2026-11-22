@@ -1,0 +1,4 @@
+random pool=8MB | index 318: height=3 levels={L0:2363 pages, L1:4 pages, L2:1 pages} leaf_recs_avg=85 leaf_fill=66% | pages_written=97718 dblwr_pages=84480 redo_bytes=61180416 physical_over_logical=141.0
+random pool=16MB | index 319: height=3 levels={L0:2363 pages, L1:4 pages, L2:1 pages} leaf_recs_avg=85 leaf_fill=66% | pages_written=48958 dblwr_pages=42442 redo_bytes=57166336 physical_over_logical=72.0
+random pool=32MB | index 320: height=3 levels={L0:2363 pages, L1:4 pages, L2:1 pages} leaf_recs_avg=85 leaf_fill=66% | pages_written=7960 dblwr_pages=5969 redo_bytes=53749248 physical_over_logical=13.1
+random pool=128MB | index 321: height=3 levels={L0:2363 pages, L1:4 pages, L2:1 pages} leaf_recs_avg=85 leaf_fill=66% | pages_written=2926 dblwr_pages=993 redo_bytes=53257728 physical_over_logical=5.4

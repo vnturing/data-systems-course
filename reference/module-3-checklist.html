@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Module 3 checklist · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="module-2-checklist.html">Module 2 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Reference sheet · Module 3 (Lessons 18 to 22; extended as the rest of the module lands)</p>
+<h1>Storage engines: structures, numbers and procedures</h1>
+<p class="lede">&ldquo;Measured&rdquo; = real InnoDB 8.0.46 or RocksDB (rocksdict 0.3.29) in a small sandbox, with ranges across repeated runs. See <code>experiments/storage/</code>. Shapes matter more than digits.</p>
+
+<h2>Three amplifications <small>(Lesson 20)</small></h2>
+<ul>
+<li><b>Write:</b> bytes physically written &divide; bytes the application wrote. <b>Read:</b> disk reads per lookup. <b>Space:</b> bytes on disk &divide; live bytes.</li>
+<li>RUM conjecture: optimizing two of read, update and memory overhead tends to hurt the third.</li>
+<li>Report <b>peak</b> space amplification for tiered stores: provision disks for it.</li>
+</ul>
+
+<h2>Append-only log + hash index <small>(Lesson 18)</small></h2>
+<ul>
+<li>Write = append. Read = hash lookup + one seek. Delete = tombstone. Merge rewrites live records only.</li>
+<li>Costs: every key in RAM, no range queries, space until merge. Recovery = scan, verify CRC, stop at the first bad record (tested on 1,400 random crash/corruption trials).</li>
+</ul>
+
+<h2>LSM-tree <small>(Lessons 19, 20)</small></h2>
+<ul>
+<li>Write: WAL + memtable; flush to a sorted immutable run; compact in the background. Read: memtable, then runs newest to oldest; range check and bloom filter skip runs.</li>
+<li>Tombstones hide older versions until compaction removes both.</li>
+</ul>
+<table>
+<tr><th>Measured RocksDB</th><th>Leveled</th><th>Universal (tiered)</th></tr>
+<tr><td>Write amp., random keys, 26 / 52 / 103 memtables of data</td><td>5.0 to 5.3 / 5.3 to 5.8 / 6.7 to 6.8 (2.3 at 6)</td><td>4.0 to 5.2 at 52</td></tr>
+<tr><td>Write amp., keys in order</td><td>1.06</td><td>not measured</td></tr>
+<tr><td>Update-heavy: write amp. / space amp.</td><td>4.6 to 4.9 / 1.19 to 1.27</td><td>3.8 to 4.0 / 1.62 to 1.82</td></tr>
+<tr><td>Absent-key reads: no filter / 10-bit filter</td><td>1.3 to 2.1 / 0.011</td><td>3.3 / 0.03 to 0.04</td></tr>
+<tr><td>Present-key reads with filter</td><td>0.87</td><td>0.88 to 0.89</td></tr>
+</table>
+<ul>
+<li>WA grows with the number of levels. Ratio 4 vs 10 overlapped at this scale. Plus the WAL (about +1&times;).</li>
+<li>A bloom filter (10 bits/key) has about 1% false positives; it never gives a false negative.</li>
+<li>Results move several percent between runs (background compaction timing).</li>
+</ul>
+
+<h2>B-tree and the log <small>(Lesson 21)</small></h2>
+<table>
+<tr><th>Measured InnoDB (INT key, 100-byte rows, 16 KB pages)</th><th></th></tr>
+<tr><td>Height by rows: 1K, 10K, 100K, 1M</td><td>2, 2, 2, 3 (a warm point lookup touches exactly that many pages)</td></tr>
+<tr><td>Leaf fill: keys in order / random</td><td>93% (manual: about 15/16) / 66% (manual: between 1/2 and 15/16)</td></tr>
+<tr><td>Random inserts, 200K rows, pool = 22% / 43% / 86% / 346% of the table</td><td>141&times; / 72&times; / 13&times; / 5.4&times; physical (pages + doublewrite + redo) &divide; row bytes</td></tr>
+<tr><td>Keys in order, any pool</td><td>3.0 to 4.6&times;</td></tr>
+</table>
+<ul>
+<li>A B-tree&rsquo;s write cost is set by whether the leaves you touch are cached.</li>
+<li>A split is three page writes. No log: corrupt at 3 of 8 crash points (new leaf first) or 5 of 8 (parent first). Log only: torn pages unrecoverable (3 of 8). Log + doublewrite: 0 of 8.</li>
+<li>ARIES rules: log record durable before the page; commit once the log is durable; steal/no-force. Redo needs an intact page, so a doublewrite area keeps a good copy.</li>
+<li>Read the counters yourself: <code>Innodb_pages_written</code>, <code>Innodb_dblwr_pages_written</code>, <code>Innodb_os_log_written</code>, <code>Innodb_buffer_pool_read_requests</code>, <code>Innodb_buffer_pool_reads</code>.</li>
+</ul>
+
+<h2>Choosing <small>(Lesson 22)</small></h2>
+<ol>
+<li>Do the leaves you write to fit in memory? Then B-tree writes are cheap.</li>
+<li>Keys in order? Both are cheap.</li>
+<li>Random-key writes far beyond memory? LSM-tree advantage is largest.</li>
+<li>Latency-critical point or absent-key reads? B-tree has no surprises; an LSM-tree needs filters and a cache.</li>
+<li>Disk or flash endurance tight? Compare space and write amplification on your data.</li>
+<li><b>Then replay your own workload on both and measure.</b></li>
+</ol>
+<p><b>Not measured here:</b> latency percentiles and compaction stalls, range scans, concurrency, transactions, secondary indexes, SSD behavior, tuned configurations.</p>
+
+<h2>Measurement hygiene (learned the hard way)</h2>
+<ul>
+<li>A multiplicative scramble (<code>n * 2654435761 mod 2^32</code>) is not random: it splits leaves in lockstep and sweeps caches cyclically. Hash the key.</li>
+<li>Absent-key probes must fall inside the stored key range.</li>
+<li>Turn compression off (or use incompressible values) when measuring physical bytes.</li>
+<li>Repeat runs and report ranges; background work makes engines non-deterministic.</li>
+<li>When a model agrees with an experiment, check they are not sharing the same flaw.</li>
+</ul>
+
+<h2>Sources</h2>
+<p>See the sources list at the end of Lessons <a href="../lessons/0018-log-and-hash-index.html">18</a>, <a href="../lessons/0019-lsm-trees.html">19</a>, <a href="../lessons/0020-compaction-and-amplification.html">20</a>, <a href="../lessons/0021-b-trees-pages-and-wal.html">21</a> and <a href="../lessons/0022-btree-vs-lsm.html">22</a>.</p>
+<div class="pager"><a href="../index.html">&larr; Course home</a><a href="../syllabus.html">Syllabus &rarr;</a></div>
+</main></body></html>

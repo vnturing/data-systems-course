@@ -1,0 +1,40 @@
+{
+  "_provenance": "Real measurements, MySQL 8.0.46 (Ubuntu 24.04 package, InnoDB defaults except buffer pool sizes) and RocksDB via the rocksdict 0.3.29 Python binding, in a small sandbox. Ranges are the min and max observed across repeated runs; background compaction and flushing make both engines non-deterministic. Raw logs: results/. Reproduce with the scripts in this directory.",
+  "innodb": {
+    "sequential_load": {
+      "page_bytes": 16384,
+      "rows": {
+        "1000":    {"height": 2, "leaves": 9,    "recs_per_leaf": 111, "leaf_fill_pct": 84, "page_requests_per_lookup": 2},
+        "10000":   {"height": 2, "leaves": 82,   "recs_per_leaf": 122, "leaf_fill_pct": 93, "page_requests_per_lookup": 2},
+        "100000":  {"height": 2, "leaves": 814,  "recs_per_leaf": 123, "leaf_fill_pct": 93, "page_requests_per_lookup": 2},
+        "1000000": {"height": 3, "leaves": 8131, "level1_pages": 8, "recs_per_leaf": 123, "leaf_fill_pct": 93, "page_requests_per_lookup": 3}
+      }
+    },
+    "write_cost_200k_rows_108B_logical": {
+      "sequential": {"leaves": 1682, "leaf_fill_pct": 93, "physical_over_logical": {"pool_128MB": [3.0, 3.8], "pool_8MB": [4.3, 4.6]}, "redo_bytes": 33203712},
+      "random_md5": {
+        "leaves": 2363, "recs_per_leaf": 85, "leaf_fill_pct": 66, "table_mb": 37,
+        "pages_written": {"8": [97051, 97718], "16": [48771, 48958], "32": [7421, 7960], "128": [2773, 2926]},
+        "physical_over_logical": {"8": [140.0, 141.0], "16": [71.7, 72.0], "32": [13.0, 13.1], "128": [5.2, 5.4]},
+        "redo_bytes_range": [50000000, 62500000]
+      },
+      "superseded_quasi_random": "An earlier run used keys n*2654435761 mod 2^32, a low-discrepancy sequence. It gave 76% leaf fill, 2048 leaves and 223x at 8MB. Those numbers are NOT valid for random keys and are not used."
+    }
+  },
+  "rocksdb": {
+    "record_bytes": 108, "memtable_mb": 4, "l1_base_mb": 8, "target_file_mb": 4, "l0_trigger": 4, "compression": "none",
+    "leveled_T10_random_write_amp": {"memtables": {"6.4": [2.27, 2.27], "25.7": [4.98, 5.34], "51.5": [5.34, 5.78], "103": [6.68, 6.82]}},
+    "leveled_T4_random_51_5_memtables": [5.54, 6.04],
+    "universal_random_51_5_memtables": [4.02, 5.22],
+    "leveled_sequential_25_7_memtables": [1.06, 1.06],
+    "overwrite_5_passes": {
+      "leveled": {"space_amp": [1.19, 1.27], "write_amp": [4.61, 4.87]},
+      "universal": {"space_amp": [1.62, 1.82], "write_amp": [3.75, 3.99]}
+    },
+    "reads_block_cache_misses_per_lookup": {
+      "cache_over_dataset": 0.15,
+      "leveled": {"absent": [1.31, 2.11], "present": [1.10, 1.70], "absent_bloom": [0.011, 0.011], "present_bloom": [0.87, 0.87]},
+      "universal": {"absent": [3.33, 3.33], "present": [2.12, 2.12], "absent_bloom": [0.027, 0.036], "present_bloom": [0.88, 0.89]}
+    }
+  }
+}

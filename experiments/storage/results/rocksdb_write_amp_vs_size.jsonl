@@ -1,0 +1,4 @@
+{"label": "leveled T=10 base=8MB random n=250000", "n": 250000, "user_mb": 25.7, "sst_wa": 2.27, "total_wa": 3.32, "compact_read_mb": 30.0, "levels": {"0": [2, 6.6], "1": [2, 6.9], "2": [5, 15.0]}, "disk_mb": 28.5, "secs": 3.6}
+{"label": "leveled T=10 base=8MB random n=1000000", "n": 1000000, "user_mb": 103.0, "sst_wa": 4.98, "total_wa": 6.02, "compact_read_mb": 398.8, "levels": {"0": [2, 4.6], "1": [2, 6.5], "2": [22, 73.3], "3": [8, 29.6]}, "disk_mb": 113.9, "secs": 6.2}
+{"label": "leveled T=10 base=8MB random n=4000000", "n": 4000000, "user_mb": 412.0, "sst_wa": 6.82, "total_wa": 7.87, "compact_read_mb": 2355.9, "levels": {"1": [1, 4.3], "2": [21, 78.2], "3": [110, 372.6]}, "disk_mb": 455.0, "secs": 19.5}
+{"label": "leveled T=10 SEQUENTIAL n=1M", "n": 1000000, "user_mb": 103.0, "sst_wa": 1.06, "total_wa": 2.11, "compact_read_mb": 0.0, "levels": {"0": [3, 7.9], "1": [9, 31.6], "2": [20, 70.1]}, "disk_mb": 109.6, "secs": 4.1}

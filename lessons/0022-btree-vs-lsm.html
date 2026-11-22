@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B-tree or LSM? · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css">
+<script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 22</p>
+<h1>B-tree or LSM? A decision framework you can test</h1>
+<p class="lede">Neither structure is better. They put the cost in different places, and which one hurts depends on your keys, your memory, and what you read. This lesson ends in a test, not a verdict.</p>
+<div class="meta"><span>~55 min</span><span>1 interactive</span><span>the module&rsquo;s capstone so far</span><span>4-question check</span></div>
+
+<div class="callout win"><b class="t">What you can do after this lesson</b>
+Compare the two families on write, read and space cost using measured numbers, name the workload features that decide between them, list what this module did not measure, and follow a procedure that ends in a test of your own workload.</div>
+
+<h2>1. The measured anchors</h2>
+<p>These come from real engines (InnoDB 8.0.46 and RocksDB through its Python binding) in a small sandbox. They are not a head-to-head benchmark: the engines differ, and the write figures count different things (InnoDB&rsquo;s include the redo log and doublewrite pages; RocksDB&rsquo;s count sorted-file bytes and exclude its write-ahead log, which adds about 1&times;). Compare the <i>shapes</i>.</p>
+<table>
+<tr><th></th><th>B-tree (InnoDB)</th><th>LSM-tree (RocksDB)</th></tr>
+<tr><td><b>Point read</b></td><td>Exactly the tree height in pages: 2 to 3 when warm</td><td>Runs consulted. With a bloom filter: about 0.9 block reads for a present key, 0.01 to 0.04 for an absent one. Without: 1.3 to 2.1 (leveled), 3.3 (universal)</td></tr>
+<tr><td><b>Writes, random keys</b></td><td>5.4&times; when the tree fits in the buffer pool; 13&times; at 86%; 72&times; at 43%; <b>141&times; at 22%</b></td><td>Leveled: 5.3 to 5.8&times; at 52 memtables of data, growing with data size (2.3 to 6.8)</td></tr>
+<tr><td><b>Writes, keys in order</b></td><td>3.0 to 4.6&times;</td><td>Leveled: 1.06&times;</td></tr>
+<tr><td><b>Space</b></td><td>Random-key leaf pages 66% full (about 1.5&times; the pages); in-order 93%</td><td>Leveled 1.2 to 1.3&times; after overwrites; universal 1.6 to 1.8&times;</td></tr>
+</table>
+
+<h2>2. Same workload, three engines</h2>
+<p>The workbook inserts 100,000 records into the model B-tree and into the two LSM policies, then reads them back. &ldquo;Memory&rdquo; buys a buffer pool for the B-tree and a block cache for the LSM-trees. Move the slider and change the key order.</p>
+<div class="widget" id="sim-engines"><noscript>This interactive needs JavaScript.</noscript></div>
+<h3>What to notice (the figures are what the workbook computes)</h3>
+<ol>
+<li><b>Random keys, little memory: the B-tree writes far more.</b> At 2% memory it writes about <b>139&times;</b> the inserted bytes (pages only) against <b>5.6&times;</b> for leveled and <b>2.9&times;</b> for size-tiered. At 10% memory it is still about 102&times;.</li>
+<li><b>Memory rescues the B-tree, not the LSM.</b> At 100% memory the B-tree writes each page once (1.66&times;, equal to its space overhead) and beats both LSM policies. The LSM write cost barely moves with memory in this model, because its memtable is fixed at 2% and cache only helps reads. (In real LSM engines a larger memtable also reduces write amplification by flattening the tree; I did not model that.)</li>
+<li><b>Keys in order flatten everything.</b> At 10% memory with in-order keys: B-tree 1.24&times;, leveled 1.00&times;, and the textbook size-tiered policy 2.9&times; because it keeps merging disjoint runs (a property of that policy, not measured on real universal).</li>
+<li><b>Absent keys expose the real difference in reads.</b> A B-tree must reach a leaf to learn a key is absent: 0.9 reads at 10% memory, the same as a present key. With bloom filters the LSM-trees need about 0.02 to 0.04. Untick the filters and they pay 1.6 (leveled) and 3.0 (tiered) at the same memory.</li>
+<li><b>Space tells the other half.</b> Random-key B-tree pages cost 1.66&times; the data; the LSM-trees, with no overwrites, about 1.0&times;.</li>
+</ol>
+
+<h2>3. The RUM view</h2>
+<p>The RUM conjecture from Lesson 20 predicts exactly this picture: no structure wins all three overheads.<sup class="c"><a href="#s1">[1]</a></sup> The B-tree spends <i>memory</i> (a buffer pool big enough for the leaves you touch) to make updates cheap, and has predictable reads. The LSM-tree spends <i>read and space overhead</i> (more runs, dead versions) to make updates cheap without needing the memory, and recovers read cost with filters and caches, which are memory again. The lab shows memory moving a B-tree along that trade-off.</p>
+
+<h2>4. What I did not measure</h2>
+<ul>
+<li><b>Latency.</b> Everything here is bytes and counts. Compaction stalls, checkpoint stalls and tail latency (Lesson 7) were not measured, and they often decide real choices.</li>
+<li><b>Range scans.</b> A B-tree reads a range from adjacent leaves; an LSM-tree merges across runs. Not measured.</li>
+<li><b>Concurrency, transactions, secondary indexes.</b> InnoDB&rsquo;s clustered index, MVCC and locking are far more than the page tree modeled here.</li>
+<li><b>Devices.</b> SSD behavior, write endurance (write amplification matters for flash wear), and the sequential-versus-random gap on your hardware.</li>
+<li><b>Tuning.</b> Compression, larger memtables, parallel compactions, partitioned filters. A tuned engine can differ widely from these defaults.</li>
+</ul>
+
+<h2>5. A decision procedure (my synthesis)</h2>
+<ol>
+<li><b>Does the data you <i>write to</i> fit in memory?</b> If the hot leaves fit in the buffer pool, B-tree writes are cheap and reads are the simplest to reason about.</li>
+<li><b>Are keys written in order?</b> (time-series, auto-increment ids.) Both structures are cheap; the choice moves to other criteria.</li>
+<li><b>Random-key writes much larger than memory?</b> This is where an LSM-tree&rsquo;s write advantage is largest in these measurements.</li>
+<li><b>Are absent-key or point reads latency-critical?</b> The B-tree has no surprises; an LSM-tree needs filters and a cache sized to the hot data.</li>
+<li><b>Disk tight, or flash endurance a concern?</b> Compare space and write amplification in your measurements, not mine.</li>
+<li><b>Then test.</b> Replay a sample of your real workload against both and measure bytes written, bytes stored, and disk reads per lookup <i>and</i> latency. The scripts in <code>experiments/storage/</code> are templates.</li>
+</ol>
+<p>Where your own stack sits: MySQL&rsquo;s InnoDB is the B-tree in this module. A Kafka partition is stored as an append-only log, the family of Lesson 18 (see Kafka&rsquo;s documentation for its segment and index layout; I did not verify those details here). MySQL can also be built with RocksDB as a storage engine (MyRocks), which I did not verify or test.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0022"></div>
+<script type="application/json" id="quiz-data">[
+ {
+  "q": "Which workload does the lab show hurting a B-tree most?",
+  "options": [
+   "Inserting keys in order with plenty of memory",
+   "Random-key inserts into a tree larger than memory",
+   "Reading the same few keys repeatedly from cache",
+   "Looking up keys that exist near the root"
+  ],
+  "answer": 1,
+  "why": "Random keys touch random leaves, and once the leaves outgrow the buffer pool nearly every insert evicts a dirty page. At 2% memory the model writes about 138 times the inserted bytes; real InnoDB wrote 141 times at a quarter of the table."
+ },
+ {
+  "q": "Why do LSM-trees with bloom filters answer absent-key lookups so cheaply?",
+  "options": [
+   "Absent keys are cached permanently in the memtable",
+   "Their tombstones answer the lookup without any reads",
+   "The compaction process removes absent keys from lookups",
+   "Filters rule out most runs before reading them"
+  ],
+  "answer": 3,
+  "why": "A bloom filter can say 'definitely not in this run'. With about 1% false positives per run, almost no run is read. A B-tree must still walk to a leaf to learn a key is missing."
+ },
+ {
+  "q": "What do the lessons' measurements count, and what do they not?",
+  "options": [
+   "They count bytes and reads, but not latency percentiles",
+   "They count latency percentiles, but not bytes or reads",
+   "They count energy use, but not any disk reads",
+   "They count everything a production system would ever measure"
+  ],
+  "answer": 0,
+  "why": "Everything in this module is bytes written, bytes stored and disk reads per lookup. Latency tails (including compaction pauses), range scans, concurrency and device behavior were not measured."
+ },
+ {
+  "q": "A team must choose between engines. Which step does the lesson say you must not skip?",
+  "options": [
+   "Pick whichever engine the vendor recommends most strongly",
+   "Choose based on the engine's published benchmark charts",
+   "Replay your own workload against both and measure",
+   "Assume the newest engine is the fastest option"
+  ],
+  "answer": 2,
+  "why": "Every figure in this module moved with data size, key pattern, memory and even run-to-run timing. The decision procedure ends with measuring your own workload on both engines."
+ }
+]</script>
+<script src="../assets/quiz.js"></script>
+
+<details class="callout"><summary><b>Optional: sketch the test (20 minutes)</b></summary>
+<p>For one write-heavy table you own, write down: key pattern (ordered or random), data size versus memory, the read mix (present, absent, range), and the three numbers to record on each engine (bytes written, bytes stored, disk reads per lookup) plus a latency percentile. That one page is more valuable than any ranking.</p></details>
+
+<h2>Sources used in this lesson</h2>
+<ol class="sources">
+<li id="s1">M. Athanassoulis et al., &ldquo;Designing Access Methods: The RUM Conjecture&rdquo;, EDBT 2016. <a href="https://stratos.seas.harvard.edu/publications/designing-access-methods-rum-conjecture">stratos.seas.harvard.edu</a></li>
+<li>All numbers: this course&rsquo;s own experiments, <code>experiments/storage/measurements.json</code> and <code>results/</code> (real InnoDB 8.0.46 and RocksDB through <code>rocksdict</code> 0.3.29, small sandbox, ranges across repeated runs). The workbook is <code>assets/ui-storage.js</code> over the tested models in <code>assets/sim-lsm.js</code> and <code>assets/sim-btree.js</code>. Its figures quoted above are exactly what the widget computes with its defaults for the stated settings.</li>
+</ol>
+<div class="pager"><a href="0021-b-trees-pages-and-wal.html">&larr; Lesson 21: B-trees and the log</a><a href="../reference/module-3-checklist.html">Module 3 checklist &rarr;</a></div>
+<footer class="foot">Original course material. Concepts are drawn from the public sources cited, not reproduced from any book.</footer>
+</main>
+<script src="../assets/sim-lsm.js"></script>
+<script src="../assets/sim-btree.js"></script>
+<script src="../assets/ui-storage.js"></script>
+</body></html>
