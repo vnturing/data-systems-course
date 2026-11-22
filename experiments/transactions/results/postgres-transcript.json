@@ -1,0 +1,223 @@
+[
+  {
+    "session": "A",
+    "sql": "\\set VERBOSITY verbose\nSET statement_timeout=5000;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "\\set VERBOSITY verbose\nSET statement_timeout=5000;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SHOW server_version;",
+    "output": [
+      "18.7"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "CREATE TABLE doctors(id INT PRIMARY KEY,on_call INT); INSERT INTO doctors VALUES(1,1),(2,1);",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "CREATE TABLE counter(id INT PRIMARY KEY,v INT); INSERT INTO counter VALUES(1,100);",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; COMMIT;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "output": [
+      "ERROR:  40001: could not serialize access due to concurrent update",
+      "LOCATION:  ExecUpdate, nodeModifyTable.c:2610"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE doctors SET on_call=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SHOW transaction_isolation;",
+    "output": [
+      "repeatable read"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SHOW transaction_isolation;",
+    "output": [
+      "repeatable read"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "COMMIT;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "COMMIT;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "0"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE doctors SET on_call=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "BEGIN ISOLATION LEVEL SERIALIZABLE;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SHOW transaction_isolation;",
+    "output": [
+      "serializable"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "BEGIN ISOLATION LEVEL SERIALIZABLE;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SHOW transaction_isolation;",
+    "output": [
+      "serializable"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "COMMIT;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "COMMIT;",
+    "output": [
+      "ERROR:  40001: could not serialize access due to read/write dependencies among transactions",
+      "DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt.",
+      "HINT:  The transaction might succeed if retried.",
+      "LOCATION:  PreCommit_CheckForSerializationFailure, predicate.c:4723"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "1"
+    ]
+  }
+]

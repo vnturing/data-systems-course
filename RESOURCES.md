@@ -237,6 +237,28 @@ Relevant primary pages were opened and checked. Committed server results indepen
   Primary. Current frontend/tablet topology as one routing architecture example, distinguished from the historical paper and Redis direct-client maps. Use for: Lesson 46.
 - Own evidence: `experiments/partitioning/results/mysql-results.json`, raw `*-plan.json`, and `redis-results.json`. `tools/test-partitioning.js` checks these plus placement coverage, load conservation, stale-index witnesses, limited-remapping, cutover and bounded routing. No production latency, full migration protocol, failover or cloud throughput was measured.
 
+### Added 2026-11-22 (Module 7, Lessons 47 to 55)
+
+Primary documentation and the relevant paper sections were opened and checked. Own two-session server transcripts anchor the engine comparisons; browser models deliberately expose smaller recovery, visibility and concurrency mechanisms.
+
+- [Manual: MySQL 8.4, InnoDB and the ACID Model](https://dev.mysql.com/doc/refman/8.4/en/mysql-acid.html), [implicit commits](https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html), and [commit-flush settings](https://dev.mysql.com/doc/refman/8.4/en/innodb-parameters.html#sysvar_innodb_flush_log_at_trx_commit)
+  Primary. Transaction grouping, configuration obligations and DDL boundaries. No host/power-loss durability experiment is claimed. Use for: Lesson 47.
+- [Manual: MySQL 8.4, Transaction Isolation Levels](https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html), [Consistent Nonlocking Reads](https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html), [Multi-Versioning](https://dev.mysql.com/doc/refman/8.4/en/innodb-multi-versioning.html), and [START TRANSACTION](https://dev.mysql.com/doc/refman/8.4/en/commit.html)
+  Primary. Statement versus first-consistent-read views, current/locking operations, undo metadata, own writes and retention. The browser uses logical commit boundaries, not InnoDB's actual read-view/undo representation. Use for: Lessons 48–50.
+- [Manual: MySQL 8.4, Locking Reads](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html), [InnoDB Locking](https://dev.mysql.com/doc/refman/8.4/en/innodb-locking.html), [Phantom Rows](https://dev.mysql.com/doc/refman/8.4/en/innodb-next-key-locking.html), [Deadlock Handling](https://dev.mysql.com/doc/refman/8.4/en/innodb-deadlocks-handling.html), and [Error Handling](https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html)
+  Primary. Lock before reading; record/gap/next-key distinctions; SKIP LOCKED's incomplete view; statement versus transaction rollback. Actual range blocking and deadlock signals recorded. Use for: Lessons 48, 50–52, 55.
+- [Paper: A Critique of ANSI SQL Isolation Levels, Berenson et al., SIGMOD 1995](https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf)
+  Primary. Snapshot isolation includes a same-row write-conflict rule; write skew and predicates require wider reasoning. The course does not equate MySQL's named repeatable-read level with formal SI. Original counter/roster/booking schedules. Use for: Lessons 49–51.
+- [Docs: PostgreSQL 18, Transaction Isolation](https://www.postgresql.org/docs/18/transaction-iso.html), [Application-level Consistency](https://www.postgresql.org/docs/18/applevel-consistency.html), and [Serialization Failure Handling](https://www.postgresql.org/docs/18/mvcc-serialization-failure-handling.html)
+  Primary, deliberately versioned rather than linking to a changing current release. Repeatable-read conflict detection, SSI markers and full-decision retry boundaries. Use for: Lessons 49–55.
+- [Paper: Serializable Snapshot Isolation in PostgreSQL, Ports and Grittner, VLDB 2012](https://vldb.org/pvldb/vol5/p1850_danrkports_vldb2012.pdf)
+  Primary. Strict-2PL background, read/write anti-dependencies, dangerous structures, false positives and nonblocking read tracking. The two-transaction browser witness is not a full SSI detector or victim predictor. Use for: Lessons 52–53.
+- [Paper: The End of an Architectural Era, Stonebraker et al., VLDB 2007](https://hstore.cs.brown.edu/papers/hstore-endofera.pdf)
+  Primary H-Store research paper. Actual serial execution in an appropriate partitioned workload; no throughput claim is imported into the browser exercise. The initial generic hstore.pdf link was inaccessible; the publication's exact paper link worked. Use for: Lesson 53.
+- [Executable tests: Hermitage](https://github.com/ept/hermitage)
+  Primary. Small schedules distinguish engine behaviors and expose the limits of level names. The course lab uses original schedules inspired by that method, not the full Hermitage suite or a certification claim. Use for: Lesson 54.
+- Own evidence: `experiments/transactions/results/` records 17 MySQL 8.4.13 and 3 PostgreSQL 18.7 schedules, including exact ordered SQL/responses and engine/image metadata. `tools/test-transactions.js` checks these fixtures, the embedded lesson copy, 166 visibility cases and all six independent two-client read/write interleavings. No crashes, distributed commit, replication/failover, production throughput or application-wide protocol participation were tested.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -259,11 +281,11 @@ Relevant primary pages were opened and checked. Committed server results indepen
 
 - Module 2 follow-ups: MySQL 8.4 LTS / 9.x behavior of the features used (JSON validation, multi-valued indexes, hash join, EXPLAIN ANALYZE); the DynamoDB adjacency-list and GSI pages; the full Stonebraker/Pavlo benchmark tables; the Neo4j/Cypher manual for the variable-length path syntax shown as a sketch; histogram statistics in MySQL (column statistics) for the correlated-predicates discussion; Mongo document size limit and MySQL's JSON size limit.
 
-- MySQL-specific follow-ups: InnoDB isolation levels/MVCC, Group Replication certification and membership, Debezium connector, production parallel-apply visibility and automated failover/recovery. Core asynchronous/semi-sync, binlog and GTID material for Module 5 is now checked above.
+- MySQL-specific follow-ups: Group Replication certification and membership, Debezium connector, production parallel-apply visibility and automated failover/recovery. Core asynchronous/semi-sync, binlog and GTID material for Module 5 is now checked above.
 - AWS-specific: RDS and Aurora failover behavior, MSK defaults and configuration, DynamoDB consistency and transactions, SQS standard queue docs, SDK retry modes and defaults per language.
 - Module 1 follow-ups: read the SRE book ch. 3 and the SRE Workbook's SLO and alerting chapters directly (multi-window burn-rate alerting); watch the Krikorian talk; read Hamilton's admission-control section; find a primary queueing text (e.g. a Kleinrock or Harchol-Balter chapter) to replace the Wikipedia citation; AWS CloudWatch percentile statistics and aggregation behavior (not verified).
 - Storage engines: need primary sources for LSM-trees, B-trees/WAL, column stores (LSM paper, Bigtable, a column-store paper, RocksDB/LevelDB docs).
 - Time and clocks: Lamport's "Time, Clocks..." paper, Spanner/TrueTime, fencing-token write-ups.
-- Transactions: Berenson et al. "A Critique of ANSI SQL Isolation Levels", Cahill SSI paper, Helland "Life beyond distributed transactions".
+- Transactions follow-ups: Cahill’s original SSI paper/thesis, broader Hermitage histories, arbitrary-interval exclusion designs, distributed commit and Helland’s "Life beyond distributed transactions". Core InnoDB/MVCC, Berenson and PostgreSQL SSI material for Module 7 is checked above.
 - Streams and batch: MapReduce, Kafka paper, Flink/Dataflow model, Debezium/outbox pattern docs.
 - Practitioner post-mortems per module (real incident write-ups) to anchor "failure modes" sections.

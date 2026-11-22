@@ -1,0 +1,114 @@
+{
+  "version": "8.4.13",
+  "cases": {
+    "rollback": {
+      "value": 100
+    },
+    "dirty_ru": {
+      "during_uncommitted": 900,
+      "after_rollback": 100
+    },
+    "dirty_rc": {
+      "during_uncommitted": 100,
+      "after_rollback": 100
+    },
+    "dirty_write": {
+      "blocked_update_error": 1205,
+      "value": 100
+    },
+    "repeat_rc": {
+      "reads": [
+        100,
+        110
+      ]
+    },
+    "repeat_rr": {
+      "reads": [
+        100,
+        100
+      ]
+    },
+    "snapshot_boundary": {
+      "plain_reads": [
+        110,
+        110
+      ],
+      "locking_read": 120
+    },
+    "lost_update": {
+      "reads": [
+        100,
+        100
+      ],
+      "affected": [
+        1,
+        0
+      ],
+      "value": 110
+    },
+    "atomic_increment": {
+      "reads": [
+        100,
+        100
+      ],
+      "affected": [
+        1,
+        1
+      ],
+      "value": 120
+    },
+    "compare_and_set": {
+      "reads": [
+        100,
+        100
+      ],
+      "affected": [
+        1,
+        0
+      ],
+      "value": 110
+    },
+    "locking_increment": {
+      "reads": [
+        100,
+        110
+      ],
+      "value": 120
+    },
+    "write_skew": {
+      "counts": [
+        2,
+        2
+      ],
+      "remaining": 0
+    },
+    "guard_row": {
+      "counts": [
+        2,
+        1
+      ],
+      "remaining": 1
+    },
+    "phantom_rc": {
+      "counts": [
+        2,
+        3
+      ]
+    },
+    "phantom_rr": {
+      "counts": [
+        2,
+        2
+      ]
+    },
+    "range_lock": {
+      "insert_error": 1205
+    },
+    "deadlock": {
+      "error": 1213,
+      "victim": "B"
+    }
+  },
+  "settings": "REPEATABLE-READ\t1\t1\t0",
+  "image_id": "sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902"
+}

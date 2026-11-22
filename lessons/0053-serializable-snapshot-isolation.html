@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Serializable snapshot isolation and actual serial execution · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 53</p><h1>Serializable snapshot isolation and actual serial execution</h1><p class="lede">Serializability is a property of the committed history. Blocking locks, dependency checks with aborts, and actually running transactions one at a time can all establish that property through different mechanisms.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Explain how SSI detects unsafe dependency patterns, distinguish its read markers from blocking locks, and compare its costs with actual serial execution.</div>
+
+<h2>1. The specification does not prescribe the scheduler</h2>
+<p>A serializable execution has effects equivalent to some complete one-at-a-time order of the committed transactions. The transactions may overlap physically, as long as the committed observations and effects admit that order. Actual serial execution is one implementation; two-phase locking and serializable snapshot isolation are others.</p>
+<p>Serializability does not by itself specify a wall-clock freshness order across replicas, HTTP requests or external side effects. A transaction can also faithfully serialize incorrect business logic. Keep the isolation property distinct from the invariant and the end-to-end response contract.</p>
+<h2>2. Start with snapshots, add dependency checking</h2>
+<p>The roster has two anti-dependencies: A read doctor 2 before B’s change, and B read doctor 1 before A’s change. Letting both transactions commit would require A before B and B before A. Snapshot isolation alone checks overlapping writes and misses this disjoint-write cycle. SSI tracks additional read/write relationships and rejects unsafe combinations.</p>
+<div class="widget" id="sim-tx-serial"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Predict first:</b> snapshots alone let both doctors leave. With SSI, one attempt aborts and its full retry sees only one doctor left. With actual serial execution, the second decision starts after the first finishes. The invariant holds through different scheduling behavior.</p>
+<h2>3. SSI does not run a complete cycle detector for every history</h2>
+<p>The Ports–Grittner paper describes an efficient check for dangerous structures involving consecutive read/write anti-dependencies, refined by commit-order information. Such a structure can indicate a possible serialization anomaly without being a complete cycle. Conservative aborts are therefore possible.</p>
+<p>Our two-transaction widget shows one concrete cycle, not that production detector. It cannot predict every PostgreSQL abort, victim choice, safe read-only view or memory-management case. The real server fixture separately records the roster failure under repeatable read and a serialization failure under serializable isolation.</p>
+<p>Do not teach the rule as “abort whenever two transactions share a read” or “every anti-dependency is unsafe.” Harmless overlap exists. SSI’s value is permitting useful concurrency while preventing unsafe histories from fully committing.</p>
+<h2>4. Predicate markers are evidence, not an ordinary S lock</h2>
+<p>PostgreSQL’s SIReadLock markers record read coverage for dependency detection; they do not block a writer merely because it changes something an older snapshot read. Write/write conflicts and other locks can still block. Marker granularity can be tuple, page or relation, and coarser tracking can cause more conservative conflicts.</p>
+<p>The query plan can therefore affect abort rates as well as execution cost. A wide scan may record broader read evidence than a selective indexed access. This is different from InnoDB range locks that can physically stop an insertion while a locking read remains open.</p>
+<h2>5. Retrying is part of the contract</h2>
+<pre><code>repeat up to the operation's bounded retry budget:
+    begin a fresh serializable transaction
+    read the complete decision inputs
+    validate the business rule
+    write the changes and any outbox intent
+    attempt commit
+    on a known retryable abort:
+        rollback/close the failed attempt
+        back off; recompute from fresh reads
+    on uncertain commit outcome:
+        recover using the durable operation identity</code></pre>
+<p>A serialization failure can happen at a statement or at commit; do not acknowledge success before commit. Do not reuse the doomed attempt’s read results or send irreversible notifications on every attempt. SQLSTATE 40001 identifies PostgreSQL serialization failures; other error classes require their own handling. Idempotency is still needed for uncertain execution and client retries.</p>
+<h2>6. Actual serial execution changes the resource trade</h2>
+<p>If each transaction runs completely before the next begins, there is no concurrent decision interleaving inside that execution domain. The second doctor sees the first doctor’s committed change. A short in-memory procedure that accesses local data can avoid concurrency-control overhead in such a design.</p>
+<p>But one slow procedure can delay everything behind it. Blocking on an HTTP response while occupying the serial executor turns network latency into the service time for queued transactions. Prepare outside the executor, then perform a short atomic decision with revalidation. CPU, storage, logging, replication and input validation do not disappear merely because concurrency scheduling is simpler.</p>
+<p>H-Store is a primary research example of partitioned, serial transaction execution for suitable workloads. Parallel partitions can run independently; a transaction spanning them needs an additional coordination contract. “One thread per partition” alone does not prove serializable cross-partition transactions. Our browser model covers one roster on one execution domain, and measures no throughput advantage.</p>
+<h2>7. Choose the mechanism with evidence</h2>
+<p>Compare representative contention, lock waits, abort/retry rates, tail latency, long-reader overhead and transaction duration. An optimistic scheme can waste work on aborts; a blocking scheme can wait before doing it; a serial executor can queue work behind an outlier. None is universally fastest. First establish the invariant, then measure the cost of a correct implementation.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0053"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "What does serializability require of successfully committed transactions?",
+  "options": [
+   "Some equivalent complete serial ordering",
+   "Every client uses one thread",
+   "No transaction can ever abort",
+   "All replicas expose current timestamps"
+  ],
+  "answer": 0,
+  "why": "The committed observations and effects must be equivalent to a one-at-a-time transaction order; physical overlap can still occur."
+ },
+ {
+  "q": "What role does a PostgreSQL SIReadLock marker serve?",
+  "options": [
+   "It blocks every later writer",
+   "It replaces all exclusive locks",
+   "It records dependency detection evidence",
+   "It publishes the transaction result"
+  ],
+  "answer": 2,
+  "why": "SSI markers track reads for conflict detection; they do not function as ordinary blocking shared data locks."
+ },
+ {
+  "q": "Why can SSI abort a transaction without a complete cycle witness?",
+  "options": [
+   "Snapshots ignore every committed change",
+   "Conservative dangerous structures trigger rejection",
+   "All overlapping transactions must abort",
+   "The SQL statement lacks columns"
+  ],
+  "answer": 1,
+  "why": "Efficient dangerous-structure detection can be conservative. The simplified widget is not PostgreSQL’s full detector."
+ },
+ {
+  "q": "A serial executor performs an HTTP call inside each transaction. What cost becomes especially visible?",
+  "options": [
+   "All dependency tracking becomes free",
+   "Every external effect becomes reversible",
+   "All partitions automatically share order",
+   "Slow calls delay queued transactions"
+  ],
+  "answer": 3,
+  "why": "The whole execution domain can queue behind that transaction. Keep the atomic procedure short and revalidate prepared inputs."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For one cross-row invariant, compare common-guard locking with serializable transactions. Specify retry side effects, expected contention and which measurements would decide between two correct designs.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://vldb.org/pvldb/vol5/p1850_danrkports_vldb2012.pdf">Ports and Grittner (2012)</a>. Dangerous structures, nonblocking read tracking, false positives and memory bounds.</li><li>Primary: <a href="https://www.postgresql.org/docs/18/transaction-iso.html#XACT-SERIALIZABLE">PostgreSQL Serializable Isolation</a>. Predicate markers and dependency monitoring.</li><li>Primary: <a href="https://www.postgresql.org/docs/18/mvcc-serialization-failure-handling.html">Serialization Failure Handling</a>. </li><li>Primary: <a href="https://hstore.cs.brown.edu/papers/hstore-endofera.pdf">Stonebraker et al., The End of an Architectural Era (2007)</a>. Primary research system, not a benchmark of this course’s toy model.</li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0052-two-phase-locking.html">Lesson 52</a><a href="0054-lab-isolation-levels.html">Lesson 54</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

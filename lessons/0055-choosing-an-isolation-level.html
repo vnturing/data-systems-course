@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Choosing isolation for a real feature · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 55</p><h1>Choosing isolation for a real feature</h1><p class="lede">Choose an isolation protocol by proving the feature’s invariant under concurrency, then measure its operational cost. A level name is one part of that protocol.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Turn a feature into an invariant, dependency set and failure schedule; select a defensible protocol and specify retries, side effects and operational evidence.</div>
+
+<h2>1. Begin with a sentence that can be false</h2>
+<p>“The feature is consistent” is hard to test. “For every roster, at least one doctor remains on call after each committed change” is a useful invariant. “No two active bookings claim the same discrete room/slot” is another. A report’s contract can instead be “all exported tables reflect the same committed view.” These are different requirements.</p>
+<p>List all writers, including jobs, import tools and administrative SQL. Then list the reads and predicates used to decide each write. Include absence, sums, related records and external decisions. The invariant’s scope determines what must be coordinated; the row you happen to update may be smaller than that scope.</p>
+<div class="widget" id="sim-tx-choice"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Try:</b> protect the roster with a stable snapshot, then a guard and then serializable transactions. Change the feature to a report. The snapshot becomes a useful fit because the requirement changed from concurrent admission to consistent observation.</p>
+<h2>2. Four features, four concrete arguments</h2>
+<div class="table-scroll"><table><thead><tr><th scope="col">Feature</th><th scope="col">Candidate protocol</th><th scope="col">Argument and boundary</th></tr></thead><tbody><tr><td>Accumulating a counter</td><td>UPDATE v=v+delta</td><td>The update expression preserves both additions; an app-side replacement does not</td></tr><tr><td>One exact room/slot claim</td><td>UNIQUE(room_id,slot_id)</td><td>The database rejects a second exact-key claim; arbitrary interval overlap is a different rule</td></tr><tr><td>At least one doctor remains</td><td>Common roster guard + fresh count</td><td>All admissions serialize at that roster; every writer participates</td></tr><tr><td>Multi-query consistent report</td><td>One transaction snapshot</td><td>The report reads one view; this need not be the latest global state</td></tr></tbody></table></div>
+<p>Serializable transactions can also protect correctly expressed transactional decisions, with full retries and verified engine semantics. They do not replace constraints, business validation or transaction boundaries. For a simple single-row update, a narrower protocol may be easier to measure and explain. For a complex evolving cross-row rule, a serializable contract may reduce application-specific locking reasoning.</p>
+<h2>3. Worked feature: roster changes</h2>
+<p>Start with the counterexample from Lesson 51: both transactions read 2, each writes a different row, both commit 0. Choose a pre-existing guard row per roster. Begin a read-committed transaction; lock the guard; count current on-call doctors; admit an off-call transition only if another remains; write the change and an outbox row; commit.</p>
+<p>Every membership mutation uses the same guard: removing a doctor, moving them to another roster, changing status, bulk imports and direct administrative tools. A multi-roster change needs a consistent guard acquisition order. The operation identity is unique and records a result in the same transactional domain so retrying the request can recover it.</p>
+<p>The proof has two steps. First, at most one relevant decision for a roster is inside validation/write at a time. Second, after acquiring the lock, a fresh committed count includes the preceding holder’s change. A decision with count 1 refuses removal. Therefore each accepted transition preserves the minimum. The proof fails if a writer bypasses the guard, uses a stale earlier snapshot, or sends a success response before commit.</p>
+<h2>4. Worked feature: bounded stock</h2>
+<pre><code>START TRANSACTION;
+-- Claim an operation key here; a repeated request recovers its stored result.
+UPDATE stock SET available=available-1
+  WHERE sku_id=? AND available&gt;0;
+-- Require affected rows = 1; otherwise store/reply sold out appropriately.
+-- Insert the reservation and outbox intent only for an admitted request.
+COMMIT;</code></pre>
+<p>The predicate and decrement execute together under the row’s write protection. This can establish a one-row nonnegative bound, provided every stock-reducing path obeys it and related records commit atomically. A reservation that spans several SKUs needs a whole multi-row protocol; handle partial failure by rollback and choose an acquisition order. The one-line update alone is not a complete checkout design.</p>
+<h2>5. Retry policy is part of feature behavior</h2>
+<p>Separate a sold-out or duplicate-slot business rejection from a retryable concurrency abort. On a known abort, roll back the attempt, recompute its reads and decisions in a new transaction, and use bounded backoff. On uncertain COMMIT, query by durable operation identity. Do not repeat an external charge just because an SQL retry was safe.</p>
+<p>For MySQL, inspect rollback scope for lock-wait timeouts versus deadlocks. For PostgreSQL serialization failures, retry the complete transaction, including the logic that chooses SQL values. Set a deadline for the caller’s operation as well as limits for individual attempts. A correct but unbounded retry storm is an operational failure.</p>
+<h2>6. Measure the cost of the correct protocol</h2>
+<p>Exercise representative hot keys, transaction duration and conflict rates. Observe lock-wait time, deadlock frequency, serialization aborts, retry count, queueing, tail latency and snapshot history pressure. Broad scans and changed indexes can alter both locks and read tracking. Record engine/version, level, SQL and plan alongside the measurement.</p>
+<p>The module’s fixtures measure outcomes, not production throughput. Use them as correctness examples, then benchmark the actual feature in a controlled environment. A lack of failures in a load test does not replace the invariant argument; a single violating history can still invalidate that argument.</p>
+<h2>7. The review you should be able to deliver</h2>
+<pre><code>Invariant: exactly what must remain true?
+Decision inputs: rows, predicates, absence and external state
+Boundary: engine/version, connection, isolation, transaction start/end
+Counterexample: minimal concurrent history that would break the rule
+Defense: constraint / atomic expression / locks / version / serializable
+Participation: every writer and relevant read uses the protocol
+Failure: rollback scope, bounded retries, uncertain commit recovery
+Effects: operation identity, outbox, downstream deduplication
+Evidence: observed schedules, documented contract, workload measurements</code></pre>
+<p>Use the <a href="../reference/module-7-checklist.html">Module 7 review sheet</a> for a design review. Module 8 will make the environment less cooperative: unreliable networks, clocks and process pauses. The transaction boundary remains useful, but you will need to say which facts and side effects lie beyond it.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0055"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "What should determine the first isolation design discussion?",
+  "options": [
+   "The newest database product name",
+   "The exact invariant being protected",
+   "The largest connection pool size",
+   "The shortest possible table name"
+  ],
+  "answer": 1,
+  "why": "Start with a falsifiable feature rule, then identify its decision dependencies and all writers."
+ },
+ {
+  "q": "Why does UNIQUE(room_id,slot_id) not solve arbitrary interval overlaps?",
+  "options": [
+   "Every interval uses uncommitted reads",
+   "Unique constraints always require clocks",
+   "All rooms share identical identifiers",
+   "Different start keys can overlap"
+  ],
+  "answer": 3,
+  "why": "The exact-slot identity rule is narrower than general interval intersection. Use a protocol or supported constraint matching that predicate."
+ },
+ {
+  "q": "What must be included when retrying a serialization failure?",
+  "options": [
+   "Fresh reads and recomputed decisions",
+   "Only the last stale assignment",
+   "Every previously completed external payment",
+   "An unlimited immediate retry loop"
+  ],
+  "answer": 0,
+  "why": "The full transaction decision must be recomputed in a new attempt. Side effects need their own safe boundary."
+ },
+ {
+  "q": "A common guard protocol passes the recorded two-session example. Which review item is still essential?",
+  "options": [
+   "Every request uses unique timestamps",
+   "All reports disable database snapshots",
+   "Every relevant writer uses guards",
+   "Every transaction contacts every replica"
+  ],
+  "answer": 2,
+  "why": "The invariant proof depends on protocol participation by every path that can change the rule, including jobs and administrative operations."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Write the review artifact above for one feature you own. Keep the at-work exercise optional; the worked roster and stock examples are sufficient to complete the lesson independently.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html">InnoDB Locking Reads</a>. </li><li>Primary: <a href="https://www.postgresql.org/docs/18/applevel-consistency.html">Application-level Consistency Checks</a>. </li><li>Primary: <a href="https://www.postgresql.org/docs/18/mvcc-serialization-failure-handling.html">Serialization Failure Handling</a>. </li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html">InnoDB Error Handling</a>. </li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0054-lab-isolation-levels.html">Lesson 54</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

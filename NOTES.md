@@ -78,6 +78,17 @@
 - 0046 routing/discovery (49 exact Redis slots; real CROSSSLOT, MOVED, ASK/ASKING and completed cutover)
 - Module 6 complete: lessons 42–46; reference/module-6-checklist.html, navigation, sources, experiments/partitioning/ and test-partitioning.js. Full checks and five-lesson browser QA passed at 320px/390px, including controls, quiz progress, themes, labels, print and no-JS fallbacks.
 
+- 0047 ACID (transfer recovery drill; grouping, persistence, unknown commit and escaped effects)
+- 0048 dirty reads/writes and read committed (uncommitted rollback and statement-view schedules)
+- 0049 snapshot/MVCC (version-chain visibility, active-transaction caveat and first-read/current-read distinction)
+- 0050 lost updates (five prevention protocols; real stale assignment, expression, version predicate and locking reads)
+- 0051 write skew/phantoms (roster anti-dependencies, guard/fresh validation, absence and exact-slot admission)
+- 0052 two-phase locking (S/X compatibility, wait graph, range insertion blocking and actual detected deadlock)
+- 0053 SSI/serial execution (bounded cycle witness, nonblocking read tracking, conservative aborts and executor queueing)
+- 0054 isolation lab (17 MySQL 8.4.13 and 3 PostgreSQL 18.7 original schedules with exact transcripts)
+- 0055 feature isolation review (invariant-to-protocol workbook, roster and stock examples, bounded retry/side-effect contract)
+- Module 7 complete: lessons 47–55; reference/module-7-checklist.html, navigation, source record, experiments/transactions/ and test-transactions.js. Full model/quiz checks pass; all nine lessons pass browser controls, quizzes, saved progress, themes, labels, 320px/390px layouts, print and no-JS checks. Delivery does not establish learner mastery.
+
 ## Measurement lessons from Module 3 (apply to every future module)
 - A scrambled sequence (n*2654435761 mod 2^32) is NOT a random key source; it silently distorted the first B-tree numbers (76% fill / 223x became 66% / 141x). A model that shares the flaw will agree with a flawed experiment, so agreement is weak evidence.
 - Real engines are non-deterministic: record ranges across repeated runs, not single values (RocksDB WA moved 4.98 vs 5.34; leveled absent-key reads 1.3 vs 2.1 depending on 4 vs 5 sorted runs).
@@ -88,7 +99,7 @@
 A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Module 3 also used real RocksDB through `pip install rocksdict` and read InnoDB page headers straight from the .ibd file. Background processes do not survive between tool calls, so start MySQL in the same command as the experiment.
 
 ## Next up
-1. Module 7 (transactions), Lessons 47–55. Modules 4–6 were completed after Module 3 at the learner's request on 2026-11-22. Do not infer learner mastery from delivery; do not require another assessment before building the next outlined module.
+1. Module 8 (the trouble with distributed systems), Lessons 56–60. Modules 4–7 were delivered at the learner’s request on 2026-11-22. Do not infer learner mastery from delivery; do not require another assessment before building the next outlined module.
 2. Lessons learned: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. MySQL's range boundary used the column after the range (92 entries, not 100); Redis restart settings differed from runtime settings; tiny compressed chunks grew with codec overhead. Preserve those observations.
 3. New experiment environment: macOS host, Linux/arm64 Docker containers, isolated Python 3.14 venv. The older sandbox notes above describe historical experiments, not requirements for the current machine. Temporary containers have no published ports and are removed after verification. Do not connect experiments to the learner's existing servers.
 
@@ -124,3 +135,14 @@ A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-s
 - Rebalancing counts are pure equal-size-key model results, not bytes or network timings. Stable ring tokens/fixed slots changed ownership only to the added node; modulo also moved keys between old nodes.
 - Independent-item salting trades write concentration for logical read fan-out. Repeated reads and serialized admission have different mitigation contracts.
 - Local/global index placement is modeled independently of cloud internals. Revalidation cannot recover a posting absent from the candidate list. Capture/replay and fencing switches represent assumptions, not implemented migration protocols.
+
+## Measurement lessons from Module 7
+- Independent real MySQL 8.4.13/PostgreSQL 18.7 schedules run in owned, uniquely named containers with networking disabled, no published ports and cleanup. Engine versions and image IDs are recorded; mutable tags are not treated as version pins.
+- Persistent CLI sessions use response markers. Merging stdout/stderr only at the Docker host was insufficient: stream delivery let an SSI error appear after its marker. Redirect client stderr to stdout inside the container. A separate backend-ID/transaction-ID/SIReadLock probe exposed the harness error; no false successful SSI observation was retained.
+- PostgreSQL readiness checks TCP to exclude its temporary initialization server. The final same-row RR conflict and SSI roster commit both report 40001; RR still allows disjoint-write skew.
+- MySQL RR allowed both stale UPDATE v=110 commits after reads of 100; the second changed zero rows. SQL success, affected rows and business intent are separate facts. Atomic increments reached 120; CAS affected [1,0], leaving 110 before any retry.
+- START TRANSACTION before another writer does not alone freeze an InnoDB read view. First plain read included 110, next stayed 110, locking read saw 120. The version widget uses logical commit events and omits real active-transaction read-view metadata.
+- Common guard uses fresh read-committed validation. The corrected ordered schedule read [2,1] and retained one doctor; it does not prove every application writer participates. Locking only the changed doctor is insufficient for the shared invariant.
+- An indexed locking range blocked insertion (1205); plain RR hid a committed insertion from rereads. Preventing visible phantoms and preventing predicate admission races are different obligations.
+- A real wait edge is observed before closing the deadlock cycle. The 1213 victim may vary. Default 1205 rolls back only the waiting statement; the runner explicitly aborts afterward.
+- Browser SSI is a two-transaction witness, not a production dangerous-structure detector. Actual serial execution is one-domain only. No crash durability, replication, failover, distributed transaction or throughput conclusion was measured.

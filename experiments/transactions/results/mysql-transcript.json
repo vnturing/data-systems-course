@@ -1,0 +1,906 @@
+[
+  {
+    "session": "A",
+    "sql": "USE m7; SET SESSION innodb_lock_wait_timeout=1;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "USE m7; SET SESSION innodb_lock_wait_timeout=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT VERSION();",
+    "output": [
+      "8.4.13"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT @@transaction_isolation,@@innodb_flush_log_at_trx_commit,@@sync_binlog,@@innodb_rollback_on_timeout;",
+    "output": [
+      "REPEATABLE-READ\t1\t1\t0"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=70; ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=900 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "900"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=900 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=900 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=200 WHERE id=1;",
+    "output": [
+      "ERROR 1205 (HY000) at line 29: Lock wait timeout exceeded; try restarting transaction"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=120 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;",
+    "output": [
+      "120"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "output": [
+      "0"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=v+10 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=v+10 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "120"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=110,version=version+1 WHERE id=1 AND version=1; SELECT ROW_COUNT(); COMMIT;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=110,version=version+1 WHERE id=1 AND version=1; SELECT ROW_COUNT(); COMMIT;",
+    "output": [
+      "0"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;",
+    "output": [
+      "100"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; COMMIT;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;",
+    "output": [
+      "110"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE counter SET v=120 WHERE id=1; COMMIT;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;",
+    "output": [
+      "120"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1; COMMIT;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=2; COMMIT;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "0"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT id FROM guard WHERE id=1 FOR UPDATE;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "COMMIT;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SELECT id FROM guard WHERE id=1 FOR UPDATE;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "COMMIT;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "INSERT INTO bookings VALUES(3,15);",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "output": [
+      "3"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "INSERT INTO bookings VALUES(3,15);",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT id FROM bookings FORCE INDEX(by_room) WHERE room>=10 AND room<30 FOR UPDATE;",
+    "output": [
+      "1",
+      "2"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "INSERT INTO bookings VALUES(3,15);",
+    "output": [
+      "ERROR 1205 (HY000) at line 109: Lock wait timeout exceeded; try restarting transaction"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION innodb_lock_wait_timeout=10;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION innodb_lock_wait_timeout=10;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "SELECT id FROM doctors WHERE id=1 FOR UPDATE;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT id FROM doctors WHERE id=2 FOR UPDATE;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT CONNECTION_ID();",
+    "output": [
+      "10"
+    ]
+  },
+  {
+    "session": "wait-observer",
+    "sql": "SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.threads t ON w.REQUESTING_THREAD_ID=t.THREAD_ID WHERE t.PROCESSLIST_ID=10;",
+    "output": [
+      "1"
+    ]
+  },
+  {
+    "session": "B",
+    "sql": "SELECT id FROM doctors WHERE id=1 FOR UPDATE;",
+    "output": [
+      "ERROR 1213 (40001) at line 119: Deadlock found when trying to get lock; try restarting transaction"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "SELECT id FROM doctors WHERE id=2 FOR UPDATE;",
+    "output": [
+      "2"
+    ]
+  },
+  {
+    "session": "A",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "B",
+    "sql": "ROLLBACK;",
+    "output": []
+  },
+  {
+    "session": "A",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "output": []
+  }
+]

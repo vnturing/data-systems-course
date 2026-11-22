@@ -1,0 +1,227 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lab: test isolation against real databases · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 54</p><h1>Lab: test isolation against real databases</h1><p class="lede">Names such as repeatable read hide implementation differences. Run a controlled two-session schedule, record each response, and explain exactly what the observation establishes.</p><div class="meta"><span>~40 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Reproduce the module’s isolation witnesses in disposable MySQL and PostgreSQL instances, inspect ordered transcripts, and separate observation, mechanism and untested guarantee.</div>
+
+<h2>1. Predict, execute, explain</h2>
+<p>This lab follows the useful Hermitage idea: small histories differentiate isolation behavior more clearly than a list of level names. The schedules here are original, deliberately limited examples. They are not the full Hermitage suite, a Jepsen test, or a proof about every SQL program.</p>
+<p>You can work entirely from the recorded tables and interactive below. Reproduction is optional and does not gate the next lesson. The site and CI require only Node and Python’s standard library; Docker is needed solely to rerun the independent server observations.</p>
+<h2>2. Run owned, isolated databases</h2>
+<pre><code># From the repository root, with Docker running:
+python3 experiments/transactions/isolation.py /tmp/dsc-transactions-run
+# Read mysql-results.json and postgres-results.json in that directory.
+# The matching *-transcript.json files contain the exact ordered SQL.</code></pre>
+<p>The script creates uniquely named MySQL 8.4 and PostgreSQL 18 containers with networking disabled and no published ports. It connects using the bundled command-line clients, preserves A and B as separate persistent sessions, records versions/settings and image IDs, and removes its containers and anonymous volumes in a finally block. It does not connect to an existing database or require your application credentials. Image tags can advance; the results record what actually ran.</p>
+<p>The MySQL client needs force mode so an expected error does not terminate the session before the response marker. PostgreSQL’s client receives an explicit verbosity setting so SQLSTATEs are recorded. The harness checks readiness of the final TCP server rather than the image’s temporary initialization server.</p>
+<h2>3. Establish the baseline</h2>
+<p>Before opening the results, predict each row of this table. A read test needs an actual reader kept open across the other session’s commit. A lost-update test needs both original reads before either replacement commits. A range-lock test must issue the competing insert while the first transaction still holds its lock.</p>
+<div class="table-scroll"><table><thead><tr><th scope="col">InnoDB schedule</th><th scope="col">Recorded result</th><th scope="col">What it establishes</th></tr></thead><tbody><tr><td>Uncommitted 900, then rollback</td><td>RU reads 900; RC reads 100</td><td>Visibility before commit differs</td></tr><tr><td>A holds row; B updates</td><td>B gets error 1205 after waiting</td><td>The conflicting write did not pass</td></tr><tr><td>Read x, B commits 110, reread</td><td>RC: 100→110; RR: 100→100</td><td>Statement view versus retained view</td></tr><tr><td>Begin before B; first read after B</td><td>110→110; FOR UPDATE sees 120</td><td>First-read boundary and current locking read</td></tr><tr><td>Both read 100, both assign 110</td><td>Final 110; both commits succeed</td><td>Lost application addition</td></tr><tr><td>Both execute v=v+10</td><td>Final 120</td><td>Both additions contribute</td></tr><tr><td>Both use expected version 1</td><td>Affected [1,0]; final 110</td><td>Stale attempt detected, not applied</td></tr><tr><td>Both read two doctors, update different rows</td><td>Final 0 on call</td><td>Write-skew witness</td></tr><tr><td>Common guard, fresh validation</td><td>Counts [2,1]; final 1</td><td>This corrected admission sequence</td></tr><tr><td>Re-execute range after an insertion</td><td>RC: 2→3; plain RR: 2→2</td><td>Stable view can hide a new row</td></tr><tr><td>Lock indexed range, then insert in it</td><td>Insert gets error 1205</td><td>This range protected the insertion gap</td></tr><tr><td>Observe one wait, then form opposite edge</td><td>A victim gets 1213</td><td>An actual detected deadlock</td></tr></tbody></table></div>
+<h2>4. Compare conflict rules, not just read stability</h2>
+<p>The PostgreSQL schedules use repeatable read and serializable isolation on the same two-doctor decision. Repeatable read allows the disjoint-write skew. Serializable prevents both decisions from committing, with one serialization failure and one doctor remaining. The same-row stale-replacement test separately shows PostgreSQL repeatable read rejecting a conflicting update, unlike the MySQL schedule.</p>
+<div class="widget" id="sim-tx-lab"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<script type="application/json" id="transaction-observations">{
+ "mysql": {
+  "version": "8.4.13",
+  "cases": {
+   "rollback": {
+    "value": 100
+   },
+   "dirty_ru": {
+    "during_uncommitted": 900,
+    "after_rollback": 100
+   },
+   "dirty_rc": {
+    "during_uncommitted": 100,
+    "after_rollback": 100
+   },
+   "dirty_write": {
+    "blocked_update_error": 1205,
+    "value": 100
+   },
+   "repeat_rc": {
+    "reads": [
+     100,
+     110
+    ]
+   },
+   "repeat_rr": {
+    "reads": [
+     100,
+     100
+    ]
+   },
+   "snapshot_boundary": {
+    "plain_reads": [
+     110,
+     110
+    ],
+    "locking_read": 120
+   },
+   "lost_update": {
+    "reads": [
+     100,
+     100
+    ],
+    "affected": [
+     1,
+     0
+    ],
+    "value": 110
+   },
+   "atomic_increment": {
+    "reads": [
+     100,
+     100
+    ],
+    "affected": [
+     1,
+     1
+    ],
+    "value": 120
+   },
+   "compare_and_set": {
+    "reads": [
+     100,
+     100
+    ],
+    "affected": [
+     1,
+     0
+    ],
+    "value": 110
+   },
+   "locking_increment": {
+    "reads": [
+     100,
+     110
+    ],
+    "value": 120
+   },
+   "write_skew": {
+    "counts": [
+     2,
+     2
+    ],
+    "remaining": 0
+   },
+   "guard_row": {
+    "counts": [
+     2,
+     1
+    ],
+    "remaining": 1
+   },
+   "phantom_rc": {
+    "counts": [
+     2,
+     3
+    ]
+   },
+   "phantom_rr": {
+    "counts": [
+     2,
+     2
+    ]
+   },
+   "range_lock": {
+    "insert_error": 1205
+   },
+   "deadlock": {
+    "error": 1213,
+    "victim": "B"
+   }
+  },
+  "settings": "REPEATABLE-READ\t1\t1\t0",
+  "image_id": "sha256:a81d043930e51745522bd5c430961cf8286f0a23f0a9a2a6e0108f7ea71b0902"
+ },
+ "postgres": {
+  "version": "18.7",
+  "cases": {
+   "stale_replacement_rr": {
+    "reads": [
+     100,
+     100
+    ],
+    "update_error": "40001",
+    "value": 110
+   },
+   "write_skew_rr": {
+    "counts": [
+     2,
+     2
+    ],
+    "remaining": 0,
+    "commit_error": null
+   },
+   "write_skew_ssi": {
+    "counts": [
+     2,
+     2
+    ],
+    "remaining": 1,
+    "commit_error": "40001"
+   }
+  },
+  "image_id": "sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"
+ }
+}</script>
+<p><b>Exercise:</b> select write_skew for MySQL, then the PostgreSQL repeatable-read and serializable cases. Point to the read responses, the transaction that failed, and the final count in the transcript. A model agreeing with its own prediction would be weak evidence; these outputs come from the actual engines.</p>
+<h2>5. Extend one witness without turning it into a timing test</h2>
+<p>Change one dimension at a time in a disposable copy: the isolation level, a plain read to FOR UPDATE, the index, or an absolute assignment to an expression. Keep the SQL and transaction boundary explicit. Require the other session’s commit or a directly observed lock wait before advancing. A sleep is not proof that the other transaction reached the intended point.</p>
+<p>The deadlock schedule polls the lock-wait table before completing the cycle. Timeout tests intentionally stop at a lock-wait error; they do not claim that a waiter was allowed through. Victim selection and incidental transaction IDs can vary and are not correctness assertions. Record a changed outcome rather than adjusting the model until it agrees.</p>
+<h2>6. Bound the conclusion</h2>
+<p>One observed forbidden history is a counterexample to a claimed guarantee. Not finding it in a handful of histories is not proof of the guarantee. The fixture establishes these schedules for these versions/settings, while the engine documentation explains the intended general contract.</p>
+<p>No crash, disk loss, network partition, replication failover, multi-shard commit, production load or latency distribution is tested. The guard example validates the ordered decisions; its success is not proof that all future application writers will acquire the guard. The browser’s retry examples recompute idealized decisions and do not run your application callback.</p>
+<p>Write your lab result in three sentences: the exact observed history; the mechanism that explains it; the additional assumption needed before relying on it for a feature. That habit is the point of the lab.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0054"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "What ordering must a lost-update experiment establish before the first replacement commits?",
+  "options": [
+   "Both original reads have completed",
+   "Every table has been dropped",
+   "All database writers have exited",
+   "Both transactions have already committed"
+  ],
+  "answer": 0,
+  "why": "If B reads only after A commits, it may compute from the fresh value and fail to reproduce the intended stale calculation."
+ },
+ {
+  "q": "What makes a fixed sleep a weak concurrency barrier?",
+  "options": [
+   "It prevents all lock acquisition",
+   "It automatically selects serializable isolation",
+   "Elapsed time proves no progress",
+   "It does not prove progress"
+  ],
+  "answer": 3,
+  "why": "A delay cannot establish that another session read, committed or acquired a lock. Observe the intended event directly."
+ },
+ {
+  "q": "Why test MySQL and PostgreSQL repeatable read with the same stale assignment?",
+  "options": [
+   "Their version numbers must match",
+   "Their conflict rules can differ",
+   "Both engines disable transaction locks",
+   "Every matching name guarantees equivalence"
+  ],
+  "answer": 1,
+  "why": "The named levels have different same-row conflict behavior. The schedule compares a concrete rule, not a marketing label."
+ },
+ {
+  "q": "The fixture contains a successful corrected guard schedule. What remains unproved?",
+  "options": [
+   "The recorded count was one",
+   "The tested statements actually executed",
+   "All application writers acquire guards",
+   "The original skew violated admission"
+  ],
+  "answer": 2,
+  "why": "A small schedule does not audit every application path. The protocol depends on every relevant writer participating."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Write a two-session witness for one real feature using only disposable data. Predict each response, preserve the exact SQL and level, then state which untested assumption prevents the result from being a production correctness proof.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://github.com/ept/hermitage">Hermitage repository</a>. Primary executable tests and limitations; our lab uses the small-schedule method without copying its test corpus.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html">InnoDB Transaction Isolation Levels</a>. </li><li>Primary: <a href="https://www.postgresql.org/docs/18/transaction-iso.html">PostgreSQL Transaction Isolation</a>. </li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0053-serializable-snapshot-isolation.html">Lesson 53</a><a href="0055-choosing-an-isolation-level.html">Lesson 55</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

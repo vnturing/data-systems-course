@@ -91,16 +91,16 @@
 
 <div class="module"><div class="part">Part II</div><h3>Module 7 · Transactions</h3>
 <ol start="47">
-<li class="status-planned">ACID without the marketing</li>
-<li class="status-planned">Dirty reads, dirty writes and read committed</li>
-<li class="status-planned">Snapshot isolation and MVCC internals</li>
-<li class="status-planned">Lost updates and the five ways to prevent them</li>
-<li class="status-planned">Write skew and phantoms <span class="why">&mdash; the bug class that survives code review</span></li>
-<li class="status-planned">Two-phase locking and its costs</li>
-<li class="status-planned">Serializable snapshot isolation; actual serial execution</li>
-<li class="status-planned">Lab: run isolation-level tests against a real database (Hermitage-style)</li>
-<li class="status-planned">Choosing an isolation level for a real feature</li>
-</ol></div>
+<li data-lesson-id="0047"><a href="lessons/0047-acid-without-the-marketing.html">ACID without the marketing</a> <span class="status-built">built</span> <span class="why">&mdash; group changes, state invariants and recover uncertain commits</span></li>
+<li data-lesson-id="0048"><a href="lessons/0048-dirty-reads-dirty-writes-and-read-committed.html">Dirty reads, dirty writes and read committed</a> <span class="status-built">built</span> <span class="why">&mdash; committed statement views and actual conflicting writers</span></li>
+<li data-lesson-id="0049"><a href="lessons/0049-snapshot-isolation-and-mvcc.html">Snapshot isolation and MVCC internals</a> <span class="status-built">built</span> <span class="why">&mdash; version visibility, first-read boundaries and current reads</span></li>
+<li data-lesson-id="0050"><a href="lessons/0050-lost-updates.html">Lost updates and five ways to prevent them</a> <span class="status-built">built</span> <span class="why">&mdash; expressions, locks, versions, conflict detection and merge</span></li>
+<li data-lesson-id="0051"><a href="lessons/0051-write-skew-and-phantoms.html">Write skew and phantoms</a> <span class="status-built">built</span> <span class="why">&mdash; cross-row admission, predicates and absent records</span></li>
+<li data-lesson-id="0052"><a href="lessons/0052-two-phase-locking.html">Two-phase locking and its costs</a> <span class="status-built">built</span> <span class="why">&mdash; read/write locks, indexed ranges, wait graphs and retries</span></li>
+<li data-lesson-id="0053"><a href="lessons/0053-serializable-snapshot-isolation.html">Serializable snapshot isolation and actual serial execution</a> <span class="status-built">built</span> <span class="why">&mdash; dependency tracking, conservative aborts and serial executors</span></li>
+<li data-lesson-id="0054"><a href="lessons/0054-lab-isolation-levels.html">Lab: test isolation against real databases</a> <span class="status-built">built</span> <span class="why">&mdash; 20 controlled server schedules with exact SQL transcripts</span></li>
+<li data-lesson-id="0055"><a href="lessons/0055-choosing-an-isolation-level.html">Choosing isolation for a real feature</a> <span class="status-built">built</span> <span class="why">&mdash; match the protocol to the feature and its retry boundary</span></li>
+</ol><p style="font-family:var(--sans);font-size:.82rem;margin:.6rem 0 0"><a href="reference/module-7-checklist.html">Module 7 transaction-review checklist</a> &middot; <a href="experiments/transactions/README.md">Transaction experiments</a></p></div>
 
 <div class="module"><div class="part">Part II</div><h3>Module 8 · The trouble with distributed systems</h3>
 <ol start="56">

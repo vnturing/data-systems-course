@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Two-phase locking and its costs · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 52</p><h1>Two-phase locking and its costs</h1><p class="lede">Two-phase locking constrains when a transaction may acquire and release locks. It can enforce a serializable order, but the locks that protect correctness also create waiting, deadlocks and contention.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Read a wait graph, distinguish a wait from a deadlock, explain predicate/range protection, and design lock ordering and whole-transaction recovery.</div>
+
+<h2>1. Growing, then shrinking</h2>
+<p>In basic two-phase locking, a transaction first acquires locks and later releases them. Once it has released a lock, it does not acquire new ones. With the appropriate read and write locks, including predicate protection, this discipline constrains the history to a serializable ordering. “Two phases” describes lock acquisition and release, not a distributed commit vote.</p>
+<p>Strict variants keep exclusive locks until commit/abort so that another transaction cannot consume an uncommitted write. A common stronger variant keeps both shared and exclusive locks to transaction end. We will use that end-held design when explaining the example below. It should not be confused with two-phase commit, which is covered in Module 9.</p>
+<h2>2. Compatibility creates the wait</h2>
+<div class="table-scroll"><table><thead><tr><th scope="col">Held lock</th><th scope="col">New shared read</th><th scope="col">New exclusive write</th></tr></thead><tbody><tr><td>Shared (S)</td><td>Compatible</td><td>Wait</td></tr><tr><td>Exclusive (X)</td><td>Wait</td><td>Wait</td></tr></tbody></table></div>
+<p>Shared reads can coexist, while a writer needs exclusion. A snapshot reader can instead read an old committed version, so the table describes locking reads in this design, not every ordinary MVCC SELECT. Mixing MVCC and locks is normal; never infer an engine’s whole concurrency protocol from the presence of row locks.</p>
+<p>Two transactions can both take shared locks and later need upgrades to exclusive locks. Each can then wait for the other’s shared lock. Lock upgrades, multiple records, foreign-key checks and index records can all participate in deadlocks. “We only lock one business entity” does not establish that the database touches one physical lock.</p>
+<div class="widget" id="sim-tx-locks"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Try:</b> opposite acquisition orders produce two wait edges. The common order leaves B waiting on A, but A can acquire y and finish. Changing read mechanism explains why nonlocking snapshot readers can bypass an uncommitted writer’s data lock without reading its uncommitted value.</p>
+<h2>3. Draw the wait-for graph</h2>
+<p>A holds x and wants y. B holds y and wants x. Draw an edge from each blocked transaction to the transaction whose lock it needs. A → B → A is a cycle: neither can proceed without an intervention. A single A → B edge is only a wait; B may commit normally.</p>
+<p>InnoDB’s detector can choose a victim and roll that transaction back. The experiment deliberately observes the first lock-wait edge in performance_schema before issuing the opposite request. It records error 1213 when the cycle forms. Victim choice is not promised and is not used as a correctness assumption.</p>
+<p>A lock-wait timeout is a different signal. Error 1205 can happen without a cycle, for example because somebody holds a row lock during a slow HTTP request. Under default InnoDB settings it rolls back the waiting statement rather than the entire transaction. Our lab explicitly rolls back afterward.</p>
+<h2>4. Rows alone do not protect an empty range</h2>
+<p>Serializable locking must protect reads whose results could change through insertion. An InnoDB next-key lock combines an index record with the preceding gap; gap locking can prevent insertion between records. Unique exact-key lookups and range scans have different coverage. Under read committed, search/index-scan gap locks are generally absent, with documented exceptions for duplicate and foreign-key checks.</p>
+<p>The real range schedule locks the indexed room range [10,30) using FOR UPDATE, then tries to insert room 15 in another session. The insertion waits and hits the deliberately short timeout. The plain repeatable-read query merely retains a stable view: an insertion can commit while the old view continues returning the original count. Different mechanisms can produce similar repeated results but very different admission protection.</p>
+<h2>5. The physical plan changes contention</h2>
+<p>A broad scan can lock more index records or ranges than a precise indexed lookup. An index added for latency can therefore also change lock footprint. Inspect the predicate, access plan and lock evidence together. A SQL WHERE clause is not a diagram of physical locks.</p>
+<p>Lock duration multiplies contention. Do network calls and expensive preparation outside the locked section where the contract permits, then revalidate necessary facts inside. Acquire multiple known resources in a common order across all paths. Keep transactions bounded, monitor waits and retries, and distinguish failed admissions from transient lock contention.</p>
+<h2>6. Retry the transaction that actually aborted</h2>
+<p>A deadlock victim needs a new whole transaction, with reads and decisions recomputed. Use bounded retries with backoff/jitter rather than an immediate unbounded loop. A unique business conflict is not automatically transient. A lost COMMIT reply is uncertain execution, so operation identity remains necessary even if every deadlock retry is correct.</p>
+<p>Locks are released at transaction end; keeping a connection or an application object afterward does not extend the protection. Database data locks also are not a substitute for the external fencing problem in <a href="0034-failover-and-fencing.html">Lesson 34</a>.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0052"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "A waits for B, while B can still finish. What does the graph prove?",
+  "options": [
+   "A deadlock necessarily already exists",
+   "Every transaction must be aborted",
+   "The database has disabled locking",
+   "A wait need not deadlock"
+  ],
+  "answer": 3,
+  "why": "A cycle makes the two-row witness a deadlock. One directional wait can resolve when its holder finishes."
+ },
+ {
+  "q": "What does the two-phase rule constrain?",
+  "options": [
+   "Acquire locks before releasing locks",
+   "Replicate bytes before acknowledging writes",
+   "Prepare participants before committing them",
+   "Flush every page before reading"
+  ],
+  "answer": 0,
+  "why": "Two-phase locking constrains acquisition and release. Two-phase commit is a separate distributed commit protocol."
+ },
+ {
+  "q": "A booking predicate returns no rows. Why can serializable locking need range protection?",
+  "options": [
+   "The empty result disables transactions",
+   "Every row lock becomes global",
+   "Future inserts can change answers",
+   "No index supports empty predicates"
+  ],
+  "answer": 2,
+  "why": "Absence is a decision input too. Protecting only currently returned records may leave matching insertions unconstrained."
+ },
+ {
+  "q": "After a detected deadlock aborts the victim transaction, what should a retry recompute?",
+  "options": [
+   "Only the last assigned constant",
+   "All transaction reads and decisions",
+   "Only the database connection hostname",
+   "Every unrelated completed business operation"
+  ],
+  "answer": 1,
+  "why": "The prior transaction no longer holds a valid decision context. Restart its complete logic with fresh reads and bounded retry handling."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For one multi-row update, list acquisition order, indexes, lock duration and retry boundary. Sketch a competing path, check for a cycle, and decide how the application handles both 1205 and 1213.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://vldb.org/pvldb/vol5/p1850_danrkports_vldb2012.pdf">Ports and Grittner, Serializable Snapshot Isolation in PostgreSQL (2012)</a>. Primary paper; background contrasts strict 2PL with SSI.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-locking.html">InnoDB Locking</a>. Record, gap, next-key and intention locks.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-deadlocks-handling.html">How to Minimize and Handle Deadlocks</a>. </li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html">InnoDB Error Handling</a>. </li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0051-write-skew-and-phantoms.html">Lesson 51</a><a href="0053-serializable-snapshot-isolation.html">Lesson 53</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

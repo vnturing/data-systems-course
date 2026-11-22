@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lost updates and five ways to prevent them · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 50</p><h1>Lost updates and five ways to prevent them</h1><p class="lede">Two writers can politely wait for the same row lock and still lose one computation. The question is whether the second write uses current data or an old value calculated in the application.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Reproduce a lost update, compare five prevention protocols, and handle zero affected rows and serialization failures without reusing a stale decision.</div>
+
+<h2>1. The row is locked; the computation is not protected</h2>
+<p>A counter starts at 100. A reads 100; B reads 100. Each handler calculates 110. A updates the row to 110 and commits. B then updates it to 110 and commits. The intended effect was two additions, so 120 was required. A row lock serialized the assignments, but B’s assignment carried a stale computation.</p>
+<pre><code>-- Both transactions previously ran SELECT v and received 100.
+-- A:
+UPDATE counter SET v=110 WHERE id=1;
+COMMIT;
+-- B, after A commits:
+UPDATE counter SET v=110 WHERE id=1;
+COMMIT;  -- Both commits succeed; the final value is only 110.</code></pre>
+<p>This schedule succeeded in our MySQL 8.4.13 repeatable-read experiment. B’s second assignment changed zero rows because 110 was already stored. That is still an application failure: two successful requests were meant to add twenty. An affected-row count of zero is not automatically an SQL exception.</p>
+<div class="widget" id="sim-tx-lost"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Try:</b> change only the protocol. Follow exactly which step makes B use 110 as its input rather than 100. The model retries a detected stale attempt once; the corresponding real CAS fixture deliberately stops at the failed attempt so you can see its zero-row result.</p>
+<h2>2. Prevention 1: make the operation a database expression</h2>
+<pre><code>UPDATE counter SET v = v + 10 WHERE id = 1;</code></pre>
+<p>The database evaluates the addition while applying the row update. In our MySQL schedule both updates affected a row and the final value was 120. This is a strong fit for increments and conditional decrements that can be expressed in one statement. It does not automatically compose a rule across an unrelated row set.</p>
+<p>For stock, <code>UPDATE stock SET available=available-1 WHERE id=? AND available&gt;0</code> combines the admission predicate with the decrement. Require one affected row before accepting the reservation. A zero-row result means the requested admission was not made.</p>
+<h2>3. Prevention 2: lock before reading</h2>
+<pre><code>START TRANSACTION;
+SELECT v FROM counter WHERE id=1 FOR UPDATE;
+-- Compute using that returned value while retaining the row lock.
+UPDATE counter SET v=? WHERE id=1;
+COMMIT;</code></pre>
+<p>Every competing path must acquire the lock before reading the value used in its decision. Locking after a plain read does not retroactively freshen an already computed assignment. Keep the whole sequence on one connection and keep the transaction short. A timeout or deadlock needs explicit error handling; a lock is not a reservation beyond transaction end.</p>
+<h2>4. Prevention 3: compare-and-set with an explicit version</h2>
+<pre><code>UPDATE counter SET v=?, version=version+1
+WHERE id=? AND version=?;
+-- Exactly one row: this version was replaced.
+-- Zero rows: ROLLBACK; re-read and recompute in a new transaction.</code></pre>
+<p>A and B can both read version 1, but after A increments it, B’s version-1 predicate fails. Our real fixture records affected counts [1,0], with v=110 after just the first accepted update. A proper retry can then produce 120. The zero-row result detects a stale attempt; it does not perform the missing business operation.</p>
+<p>Use a version changed by every relevant writer. Comparing only the previous value can miss an ABA sequence, where the value changes away and back. Also a reread inside an old repeatable-read view can remain stale, so begin a new attempt with a fresh transaction boundary.</p>
+<h2>5. Prevention 4: engine conflict detection and whole retry</h2>
+<p>A snapshot-isolation same-row conflict rule can abort the stale writer. The PostgreSQL repeatable-read schedule in the lab illustrates that protection; the MySQL named-level counterexample shows why you must verify it. Recompute the entire transaction from its fresh inputs after the abort, not just the final UPDATE with the old 110.</p>
+<p>Serializable execution can protect wider dependencies as well, but still requires correct transaction boundaries and an abort policy. A read performed before BEGIN is not made serializable by wrapping only the subsequent write.</p>
+<h2>6. Prevention 5: design a mergeable operation</h2>
+<p>Sometimes the feature permits an operation log or mergeable state. Two distinct contribution records of +10 can both survive; their sum is 20. Operation identity must make replay harmless, and the derived total needs a defined freshness contract. A CRDT counter can likewise preserve concurrent contributions under its assumptions from <a href="0040-crdts-and-merge.html">Lesson 40</a>.</p>
+<p>This changes the representation and often the read contract. It is useful for accumulation, but it does not establish a bounded inventory rule: merging two admitted decrements after the fact cannot undo overselling. Last-write-wins choosing one replacement also does not preserve two intended additions. Choose a protocol that preserves the operation’s meaning.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0050"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Two transactions read 100 and both assign 110. Why can row write locks still lose an addition?",
+  "options": [
+   "Locks never apply to updates",
+   "Every assignment changes its input",
+   "The application computed stale replacements",
+   "The database must reject integers"
+  ],
+  "answer": 2,
+  "why": "Write locks serialize assignments, not the application computation performed before the lock."
+ },
+ {
+  "q": "Which statement directly preserves two concurrent additions in the MySQL counter example?",
+  "options": [
+   "UPDATE counter SET v=v+10 WHERE id=1",
+   "UPDATE counter SET v=110 WHERE id=1",
+   "UPDATE counter SET v=100 WHERE id=1",
+   "UPDATE counter SET v=0 WHERE id=1"
+  ],
+  "answer": 0,
+  "why": "An in-database expression evaluates against the current row when the update executes under its write lock."
+ },
+ {
+  "q": "A compare-and-set update affects zero rows. What must the feature do before another attempt?",
+  "options": [
+   "Treat the missing contribution committed",
+   "Commit every pending external notification",
+   "Repeat the stale assignment unchanged",
+   "Rollback then reread and recompute"
+  ],
+  "answer": 3,
+  "why": "Zero affected rows detects a stale attempt. Start a new transaction and recompute so the old view or old calculation is not reused."
+ },
+ {
+  "q": "Why is a mergeable counter insufficient for bounded stock admission?",
+  "options": [
+   "Merge operations require wall clocks",
+   "Convergence cannot enforce admission bounds",
+   "Counters cannot represent negative changes",
+   "Every duplicate creates unique stock"
+  ],
+  "answer": 1,
+  "why": "Converging contributions does not stop two concurrent operations from both consuming the same last unit."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Find a handler that loads a record, mutates an object in memory, and saves it. Name its lost-update defense, then show how every writer participates and what happens when the defense rejects an attempt.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html">Locking Reads</a>. Lock before computing from the protected value.</li><li>Primary: <a href="https://www.postgresql.org/docs/18/transaction-iso.html#XACT-REPEATABLE-READ">PostgreSQL Repeatable Read</a>. Same-row concurrent-update failure.</li><li>Primary: <a href="https://www.postgresql.org/docs/18/mvcc-serialization-failure-handling.html">Serialization Failure Handling</a>. Recompute all transaction decisions on retry.</li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0049-snapshot-isolation-and-mvcc.html">Lesson 49</a><a href="0051-write-skew-and-phantoms.html">Lesson 51</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

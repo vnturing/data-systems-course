@@ -1,0 +1,30 @@
+{
+  "version": "18.7",
+  "cases": {
+    "stale_replacement_rr": {
+      "reads": [
+        100,
+        100
+      ],
+      "update_error": "40001",
+      "value": 110
+    },
+    "write_skew_rr": {
+      "counts": [
+        2,
+        2
+      ],
+      "remaining": 0,
+      "commit_error": null
+    },
+    "write_skew_ssi": {
+      "counts": [
+        2,
+        2
+      ],
+      "remaining": 1,
+      "commit_error": "40001"
+    }
+  },
+  "image_id": "sha256:b6972e1115a4ff8eba5d7f7d19184926d1e16d7d1136ae1e1a7ebf286da0f015"
+}

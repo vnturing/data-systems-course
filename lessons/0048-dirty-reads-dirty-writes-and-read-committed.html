@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dirty reads, dirty writes and read committed · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 48</p><h1>Dirty reads, dirty writes and read committed</h1><p class="lede">Read committed removes uncommitted values from ordinary reads. It still permits two statements in one transaction to see different committed worlds.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Draw dirty-read and dirty-write schedules, explain statement-level committed views, and identify a read-skew failure that survives a transaction wrapper.</div>
+
+<h2>1. A value that never existed in a committed database</h2>
+<p>Let x=100. A starts a transaction and writes x=900 without committing. B reads 900. A rolls back. B has now based a decision on a value that was never committed: a dirty read. Even if B only generates a report, an uncommitted intermediate state can become an externally visible claim.</p>
+<p>Our InnoDB experiment reproduced this with B at READ UNCOMMITTED: B read 900 during A’s transaction and 100 after rollback. At READ COMMITTED, the same nonlocking read returned the older committed 100 while A’s write remained open. The reader did not need to wait for A just to retrieve that older version.</p>
+<h2>2. Dirty writes are a different prohibition</h2>
+<p>A dirty write would let B overwrite x while A’s change is still uncommitted. If A later aborts, which value should its undo restore without destroying B’s work? Write locks keep this particular interference out of InnoDB’s update path, even when a reader requests READ UNCOMMITTED. A read setting is not permission to overwrite somebody else’s open write.</p>
+<p>In the lab, A held the updated counter row and B’s conflicting UPDATE waited until error 1205, under an intentionally short lock-wait timeout. The timeout demonstrates that the write was not allowed through. It does not measure the normal wait duration or establish a deadlock: a single wait need not contain a cycle.</p>
+<div class="widget" id="sim-tx-reads"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Predict first:</b> choose read committed, then repeatable read. Both avoid the first dirty value. Only the repeated committed read policy changes the last observation after C commits 110. The widget combines these events for teaching; the server lab tests the mechanisms in separate schedules.</p>
+<h2>3. Read committed is a statement boundary</h2>
+<p>Under MySQL’s read committed level, each ordinary consistent SELECT obtains a fresh committed view. Keeping BEGIN open does not freeze that view across statements. If A commits between B’s two reads of x, B can read 100 and then 110. This is a nonrepeatable read. Our server fixture records exactly those two values.</p>
+<pre><code>-- Session B
+SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED;
+START TRANSACTION;
+SELECT v FROM counter WHERE id=1; -- 100
+-- Session A now updates v to 110 and commits.
+SELECT v FROM counter WHERE id=1; -- 110
+ROLLBACK;</code></pre>
+<p>The comments are scheduling instructions: pause B until A has committed. Running both statements in a single batch without controlling A’s progress is not the same experiment.</p>
+<h2>4. A committed value can still mislead a report</h2>
+<p>Accounts A and B start at 100 each. A report reads A=100. A concurrent transfer commits A=70 and B=130 together. The report next reads B=130. Every individual value was committed, but its sum is 230. No committed complete state of those two accounts had that total. This is read skew across the report’s statements.</p>
+<p>A single consistent query for the sum can keep this particular report on one statement view. A multi-query export can need one stable transaction snapshot. Neither repair establishes that a later business decision may safely act on the report; that is a separate requirement.</p>
+<h2>5. Writers evaluate more than the plain-read view</h2>
+<p>Do not infer UPDATE semantics from what an earlier SELECT returned. InnoDB’s updating and locking paths acquire locks and can examine newer records. A plain read followed by UPDATE x=110 is not an atomic “add ten,” even if each writer waits its turn. <a href="0050-lost-updates.html">Lesson 50</a> makes the lost computation visible.</p>
+<p>Nor should you use SKIP LOCKED to make a report “faster.” Skipping a locked row changes the set you inspect. That can be appropriate for queue workers claiming available jobs; it is unsuitable when the report or invariant requires all matching rows.</p>
+<h2>6. Connection and error discipline</h2>
+<p>The level belongs to a transaction/session, not to the indentation of your application code. Verify that a connection pool pins all statements to the same transaction connection. Set the intended level before starting the transaction, and avoid leaking session settings into another borrower.</p>
+<p>On an InnoDB lock-wait timeout, the default rollback scope is the waiting statement, while a detected deadlock rolls back the victim transaction. A handler that treats all SQL errors as “everything was undone” can accidentally commit earlier work. A conservative application policy is to explicitly roll back the whole feature transaction on a concurrency error, then retry the complete operation only where appropriate.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0048"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "A writes 900, B reads 900, then A aborts. What did B observe?",
+  "options": [
+   "A dirty uncommitted row value",
+   "A repeatable committed snapshot value",
+   "A serializable transaction commit order",
+   "A durable global replication barrier"
+  ],
+  "answer": 0,
+  "why": "The read depended on a write that subsequently aborted. A dirty read is about visibility before commit."
+ },
+ {
+  "q": "A holds an uncommitted row update. B also updates that row in InnoDB. What should you expect?",
+  "options": [
+   "B always overwrites immediately regardless",
+   "A automatically loses every lock",
+   "Both writes skip transaction recovery",
+   "B can wait for A"
+  ],
+  "answer": 3,
+  "why": "Write locking prevents the dirty overwrite; read uncommitted does not turn off conflicting update locks."
+ },
+ {
+  "q": "A report reads two accounts in separate read-committed statements around a transfer. What remains possible?",
+  "options": [
+   "Every value must be uncommitted",
+   "Committed values form inconsistent totals",
+   "The transaction automatically becomes serializable",
+   "All concurrent transfers are rejected"
+  ],
+  "answer": 1,
+  "why": "A fresh committed view for each statement can combine values from different committed states."
+ },
+ {
+  "q": "An InnoDB lock-wait timeout occurred with default rollback settings. What assumption is unsafe?",
+  "options": [
+   "The waiting statement was unsuccessful",
+   "An explicit rollback remains useful",
+   "All earlier transaction work disappeared",
+   "Error handling needs documented scope"
+  ],
+  "answer": 2,
+  "why": "By default a lock-wait timeout rolls back the statement, not the whole transaction. Explicitly abort if the feature needs a whole retry."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Find one multi-query report and one read-modify-write handler. Write their actual statement order and level. Construct a committed interleaving that would be allowed, then say whether it violates the feature’s contract.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-transaction-isolation-levels.html">Transaction Isolation Levels</a>. Engine-specific read and write behavior.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-error-handling.html">InnoDB Error Handling</a>. Distinguish statement rollback, transaction rollback and application retry policy.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-locking-reads.html">Locking Reads</a>. Includes the SKIP LOCKED warning.</li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0047-acid-without-the-marketing.html">Lesson 47</a><a href="0049-snapshot-isolation-and-mvcc.html">Lesson 49</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

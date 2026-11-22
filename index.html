@@ -85,7 +85,18 @@
 <p><span data-lesson-id="0045"></span><a href="lessons/0045-rebalancing-and-consistent-hashing.html"><b>45 &middot; Rebalancing and consistent hashing</b></a> &mdash; <span style="color:var(--muted)">compare placement changes and drill live cutover.</span></p>
 <p><span data-lesson-id="0046"></span><a href="lessons/0046-request-routing-and-discovery.html"><b>46 &middot; Routing and discovery</b></a> &mdash; <span style="color:var(--muted)">stale maps, hash slots and real Redis redirections.</span></p>
 <p>Reference sheet: <a href="reference/module-6-checklist.html">Module 6 partitioning-review checklist</a>. Evidence and reproduction: <code>experiments/partitioning/</code>.</p>
-<p>The <a href="syllabus.html">full syllabus</a> shows the 6 modules ahead, starting with Module 7: transactions.</p>
+<h2>Module 7 · Transactions (9 lessons)</h2>
+<p><span data-lesson-id="0047"></span><a href="lessons/0047-acid-without-the-marketing.html"><b>47 &middot; ACID without the marketing</b></a> &mdash; <span style="color:var(--muted)">group changes, state invariants and recover uncertain commits.</span></p>
+<p><span data-lesson-id="0048"></span><a href="lessons/0048-dirty-reads-dirty-writes-and-read-committed.html"><b>48 &middot; Dirty reads, dirty writes and read committed</b></a> &mdash; <span style="color:var(--muted)">committed statement views and actual conflicting writers.</span></p>
+<p><span data-lesson-id="0049"></span><a href="lessons/0049-snapshot-isolation-and-mvcc.html"><b>49 &middot; Snapshot isolation and MVCC internals</b></a> &mdash; <span style="color:var(--muted)">version visibility, first-read boundaries and current reads.</span></p>
+<p><span data-lesson-id="0050"></span><a href="lessons/0050-lost-updates.html"><b>50 &middot; Lost updates and five ways to prevent them</b></a> &mdash; <span style="color:var(--muted)">expressions, locks, versions, conflict detection and merge.</span></p>
+<p><span data-lesson-id="0051"></span><a href="lessons/0051-write-skew-and-phantoms.html"><b>51 &middot; Write skew and phantoms</b></a> &mdash; <span style="color:var(--muted)">cross-row admission, predicates and absent records.</span></p>
+<p><span data-lesson-id="0052"></span><a href="lessons/0052-two-phase-locking.html"><b>52 &middot; Two-phase locking and its costs</b></a> &mdash; <span style="color:var(--muted)">read/write locks, indexed ranges, wait graphs and retries.</span></p>
+<p><span data-lesson-id="0053"></span><a href="lessons/0053-serializable-snapshot-isolation.html"><b>53 &middot; Serializable snapshot isolation and actual serial execution</b></a> &mdash; <span style="color:var(--muted)">dependency tracking, conservative aborts and serial executors.</span></p>
+<p><span data-lesson-id="0054"></span><a href="lessons/0054-lab-isolation-levels.html"><b>54 &middot; Lab: test isolation against real databases</b></a> &mdash; <span style="color:var(--muted)">20 controlled server schedules with exact SQL transcripts.</span></p>
+<p><span data-lesson-id="0055"></span><a href="lessons/0055-choosing-an-isolation-level.html"><b>55 &middot; Choosing isolation for a real feature</b></a> &mdash; <span style="color:var(--muted)">match the protocol to the feature and its retry boundary.</span></p>
+<p>Reference sheet: <a href="reference/module-7-checklist.html">Module 7 transaction-review checklist</a>. Evidence and reproduction: <code>experiments/transactions/</code>.</p>
+<p>The <a href="syllabus.html">full syllabus</a> shows the 5 modules ahead, starting with Module 8: the trouble with distributed systems.</p>
 
 <h2>Who it's for</h2>
 <p>Developers comfortable with SQL, services and production systems who are new to the distributed-systems side. If you've ever been surprised by a duplicate message, a stale read, or a failover that lost writes, this is for you.</p>

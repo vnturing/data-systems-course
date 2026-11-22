@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Write skew and phantoms · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 51</p><h1>Write skew and phantoms</h1><p class="lede">Your code checks the rule, updates its row, and commits. A second transaction does the same to another row. Both checks were reasonable; the committed combination breaks the rule.</p><div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Construct a write-skew witness, identify predicate dependencies including absent rows, and choose a repair that protects the invariant’s whole decision set.</div>
+
+<h2>1. The two-doctor roster</h2>
+<p>Doctors 1 and 2 are both on call. The rule is <code>SUM(on_call) &gt;= 1</code>. A reads the sum as 2 and decides doctor 1 can leave. B reads 2 and decides doctor 2 can leave. A writes row 1 off-call; B writes row 2 off-call. Both commit, leaving nobody.</p>
+<div class="table-scroll"><table><thead><tr><th scope="col">Order</th><th scope="col">A</th><th scope="col">B</th></tr></thead><tbody><tr><td>1</td><td>Read both: count=2</td><td></td></tr><tr><td>2</td><td></td><td>Read both: count=2</td></tr><tr><td>3</td><td>Set doctor 1 off-call</td><td></td></tr><tr><td>4</td><td></td><td>Set doctor 2 off-call</td></tr><tr><td>5</td><td>COMMIT</td><td>COMMIT</td></tr></tbody></table></div>
+<p>The writes target different rows. Same-row conflict detection therefore cannot by itself reject this schedule. Our MySQL repeatable-read and PostgreSQL repeatable-read runs both reproduced the zero-doctor result. The rule was not represented by either row’s individual validity.</p>
+<div class="widget" id="sim-tx-skew"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Try:</b> lock only the doctor being changed. The outcome stays broken because each writer still protects a different record. Then use a common guard or serializable dependency checking. Explain what forces a decision to be re-evaluated.</p>
+<h2>2. Read/write anti-dependencies</h2>
+<p>A read doctor 2 as on-call before B changed that row. For those observations to make sense in a serial order, A needs to come before B. Symmetrically, B read doctor 1 before A changed it, requiring B before A. These requirements form A → B → A. Both transactions cannot occupy the required position in one serial ordering.</p>
+<p>This is an anti-dependency: a reader saw an earlier version than a concurrent writer installed. It differs from one transaction reading another’s committed output. Naming the edges helps distinguish “the same rows were written” from “one decision’s inputs were invalidated.”</p>
+<h2>3. A common guard turns the logical conflict into a real one</h2>
+<pre><code>SET TRANSACTION ISOLATION LEVEL READ COMMITTED;
+START TRANSACTION;
+SELECT id FROM roster_guard WHERE id=? FOR UPDATE;
+SELECT SUM(on_call) FROM doctors WHERE roster_id=?;
+-- Require count &gt; 1 before setting this doctor off-call.
+-- Every change affecting roster membership/on_call uses this guard.
+UPDATE doctors SET on_call=0 WHERE id=? AND roster_id=?;
+COMMIT;</code></pre>
+<p>This protocol assumes the application checks the count and skips the UPDATE when it is insufficient. A guard row exists for each roster. All writers, including imports and administrative paths, must acquire it before validation. The scope of the guard matches the scope of the invariant.</p>
+<p>Read committed is deliberate: after B waits for A’s guard lock, its count must use a fresh view containing A’s commit. A stale earlier snapshot followed by a newly acquired lock can still validate old facts. Our corrected server schedule read counts 2 then 1 and left one doctor on call. Locking all participating rows can also work if the membership and absence cases are properly protected; the guard makes the shared coordination point explicit.</p>
+<h2>4. Phantoms concern sets, not just changed values</h2>
+<p>Suppose a transaction checks that no booking overlaps a proposed interval. Another inserts a matching booking. A repeat of the predicate can now return an additional row: a phantom. But an old snapshot can continue returning zero while both transactions insert different booking IDs. Hiding the new row from rereads does not prevent the admission race.</p>
+<p>The dependency is on the predicate’s answer, including rows that did not yet exist. Locking the rows returned by an empty query protects no existing row at all unless the engine also protects the searched range or predicate. You must examine the actual locking semantics.</p>
+<div class="widget" id="sim-tx-phantom"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<h2>5. Match the repair to the rule</h2>
+<p>For a fixed discrete room/slot pair, <code>UNIQUE(room_id, slot_id)</code> can make at most one claim commit. Both callers may initially see absence, but one insert loses the uniqueness race. Treat it as a business conflict. This is not enough for arbitrary interval overlaps: different starts can still overlap.</p>
+<p>For an indexed InnoDB locking range at repeatable read, next-key/gap locking can prevent relevant insertions until the reader ends. Lock coverage depends on the index and predicate, and can include more than the exact logical condition. A shared room guard plus fresh overlap validation is another protocol if every booking path uses it. Serializable transactions can cover the broader dependency when all participating paths obey their contract.</p>
+<h2>6. A schedule is the review artifact</h2>
+<p>Write the invariant, read set/predicate, write set and transaction end for each participant. Produce the smallest interleaving that breaks it. Then identify the exact statement, constraint or abort rule that rejects that interleaving after the repair. “Wrapped in a transaction” and “we lock the record” are incomplete arguments until you show which shared decision they protect.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0051"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Both doctors read count 2, then update different rows off-call. What explains both commits under snapshot isolation?",
+  "options": [
+   "Snapshots never include committed data",
+   "Disjoint writes evade same-row conflicts",
+   "Each write updates every doctor",
+   "Both transactions necessarily share locks"
+  ],
+  "answer": 1,
+  "why": "The shared invariant spans the read set, while the write sets are disjoint. Same-row conflict detection alone misses it."
+ },
+ {
+  "q": "What is wrong with locking only the doctor each transaction changes?",
+  "options": [
+   "The lock protects another connection",
+   "All locks automatically become shared",
+   "Every count becomes globally current",
+   "The invariant spans other rows"
+  ],
+  "answer": 3,
+  "why": "Each path locks a different row; neither protects the other decision input or common admission point."
+ },
+ {
+  "q": "An old snapshot repeats an empty booking query. What does that establish?",
+  "options": [
+   "The reservation predicate stays protected",
+   "No concurrent insert can commit",
+   "The read view remains unchanged",
+   "All interval overlaps are rejected"
+  ],
+  "answer": 2,
+  "why": "A stable empty result is a visibility fact. It does not reserve absence or prevent a concurrent admission."
+ },
+ {
+  "q": "A common roster guard is acquired before validation. What additional requirement matters?",
+  "options": [
+   "Every relevant writer follows protocol",
+   "Every reader uses read uncommitted",
+   "Only one application hostname exists",
+   "Each doctor has distinct timestamps"
+  ],
+  "answer": 0,
+  "why": "The shared guard protects the rule only if all paths that can change it participate and validation uses the required fresh state."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Choose an at-most-N or at-least-one rule. Write two concurrent transactions with disjoint write sets. Identify the shared predicate, then show a constraint, guard or serializable abort that prevents the violating combination.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf">Berenson et al. (1995)</a>. Write skew and predicate anomalies.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-next-key-locking.html">Phantom Rows</a>. The physical range must protect relevant insertions.</li><li>Primary: <a href="https://www.postgresql.org/docs/18/applevel-consistency.html">Application-level Consistency Checks</a>. Lock before validation and account for snapshot boundaries.</li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0050-lost-updates.html">Lesson 50</a><a href="0052-two-phase-locking.html">Lesson 52</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Snapshot isolation and MVCC internals · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 49</p><h1>Snapshot isolation and MVCC internals</h1><p class="lede">A snapshot is a visibility rule over versions. MVCC is the machinery that can supply those versions without making every ordinary reader wait behind a writer.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Walk a version chain, identify the actual snapshot boundary, and explain why InnoDB repeatable read and formal snapshot isolation must not be treated as synonyms.</div>
+
+<h2>1. Keep history so the reader can choose</h2>
+<p>Suppose a writer replaces x=100 with 110, then another writer produces 120. A report whose view predates both changes can still need 100. A multi-version engine retains enough history to reconstruct the version visible to that report. The physical newest row and the logically visible row need not be the same version.</p>
+<p>InnoDB stores transaction metadata and a rollback pointer with clustered records; update undo can reconstruct older versions. Deletion marks and purge coordinate physical removal with visibility. The version-chain widget models that choice, not the byte layout, buffer manager or full read-view implementation.</p>
+<div class="widget" id="sim-tx-mvcc"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Try:</b> hold the view at event 2 while newer versions exist. It selects 100. Advance to event 4 and it selects 120. Enable the reader’s own write and 130 becomes visible to that transaction even though another transaction cannot read it as committed. A wall-clock timestamp is not used to establish this ordering.</p>
+<h2>2. A boundary is more than “small transaction ID”</h2>
+<p>A transaction may start early and commit late. A view created while it is still active must exclude its new version even if its transaction ID is numerically small. An implementation needs enough information about active and committed transactions to distinguish that case. “Take the largest ID below mine” is not a valid general visibility algorithm.</p>
+<p>The teaching model instead records explicit logical commit events and chooses a version committed by the view’s boundary, plus any own write. That is a compact way to expose the visibility decision; real InnoDB read views track transaction state rather than storing the widget’s commit-event numbers in row records.</p>
+<h2>3. When does MySQL establish the view?</h2>
+<p>For ordinary consistent reads in an InnoDB repeatable-read transaction, the first such read establishes the snapshot. START TRANSACTION alone is not necessarily that first read. A write committed by B after A begins but before A’s first SELECT can therefore be included.</p>
+<pre><code>-- A: repeatable read, START TRANSACTION (no data read yet)
+-- B: UPDATE counter SET v=110 WHERE id=1; COMMIT
+-- A: SELECT v FROM counter WHERE id=1;             -- 110
+-- B: UPDATE counter SET v=120 WHERE id=1; COMMIT
+-- A: SELECT v FROM counter WHERE id=1;             -- 110
+-- A: SELECT v FROM counter WHERE id=1 FOR UPDATE;  -- 120</code></pre>
+<p>These are <b>recorded server results</b>. The last query uses a locking read of current data rather than the older nonlocking snapshot. Mixing the two forms can expose different views inside one transaction. START TRANSACTION WITH CONSISTENT SNAPSHOT deliberately establishes an initial consistent-read view at the supported level; it does not change the configured level.</p>
+<h2>4. Snapshot isolation includes a write rule</h2>
+<p>Formal snapshot isolation combines a stable committed view with protection against overlapping same-item writes. If A and B both read x=100, calculate 110 and attempt to commit their replacements, a same-row conflict rule prevents both stale computations from silently succeeding. An abort/retry can force the loser to recompute against the new state.</p>
+<p>The crucial portability trap is calling every MVCC repeatable-read implementation “snapshot isolation.” In our MySQL repeatable-read experiment, both transactions read 100, both commit UPDATE v=110, and the final value is 110. PostgreSQL repeatable read rejects the corresponding stale write with SQLSTATE 40001 in our separate experiment. Name the read and conflict rules as well as the label.</p>
+<h2>5. Stable does not imply serializable</h2>
+<p>Even a full snapshot-isolation write-conflict rule only catches overlapping write sets. Two doctors each inspect the whole roster and then update different doctor rows. The shared decision can be invalid although the writes do not collide. <a href="0051-write-skew-and-phantoms.html">Lesson 51</a> uses that example to show why snapshots alone cannot enforce every invariant.</p>
+<p>A snapshot also need not be fresh enough for an external promise. A report can be internally consistent yet older than a user’s last acknowledged action if you chose a stale replica or historical boundary. Isolation and replica-read eligibility remain separate contracts.</p>
+<h2>6. History has a carrying cost</h2>
+<p>A long-lived reader can keep old versions necessary. New writes continue, but purge cannot simply delete history still required by a live view. Export duration, undo retention, vacuum/purge progress and space therefore matter operationally. “Readers do not block writers” is a statement about certain data locks, not a promise of zero resource interference.</p>
+<p>Keep snapshots as short as the task allows, and bound report work. Inspect engine-specific retention evidence rather than guessing a byte cost from this model. DDL and metadata locking can still interfere with readers; MVCC is not a general escape from all locks.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0049"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "A writer started before the reader but was uncommitted when its view formed. What visibility rule is needed?",
+  "options": [
+   "Every smaller transaction identifier wins",
+   "Old writers always bypass visibility",
+   "Wall clocks decide all conflicts",
+   "Active writers require explicit exclusion"
+  ],
+  "answer": 3,
+  "why": "Start order does not imply commit visibility. A read view must account for transactions active at its boundary."
+ },
+ {
+  "q": "A starts MySQL repeatable read, B commits, then A makes its first plain SELECT. Which result is possible?",
+  "options": [
+   "B remains invisible until restart",
+   "A includes that committed write",
+   "A necessarily uses dirty reads",
+   "B automatically aborts its transaction"
+  ],
+  "answer": 1,
+  "why": "The first ordinary consistent read generally fixes the view; START TRANSACTION alone need not do so."
+ },
+ {
+  "q": "A plain snapshot read returns 110, then a locking read returns 120 in InnoDB. What explains this?",
+  "options": [
+   "The two read mechanisms differ",
+   "The committed log became corrupt",
+   "The first read necessarily failed",
+   "The transaction lost its connection"
+  ],
+  "answer": 0,
+  "why": "The locking read accesses current lockable data; the plain repeatable read uses the established snapshot."
+ },
+ {
+  "q": "Why can a long-lived snapshot increase history retention?",
+  "options": [
+   "Each read disables all indexes",
+   "Every writer must immediately abort",
+   "Old versions can remain required",
+   "Snapshots duplicate every physical disk"
+  ],
+  "answer": 2,
+  "why": "Purge cannot discard history still needed by a reader’s visibility boundary. The exact storage cost is engine/workload specific."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Trace the start, first consistent read, current/locking reads and end of one long transaction. State which commits each operation should see, and what history must remain available until it finishes.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-multi-versioning.html">InnoDB Multi-Versioning</a>. Metadata, undo reconstruction and purge.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-consistent-read.html">Consistent Nonlocking Reads</a>. First-read view and mixed current/snapshot behavior.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/commit.html">START TRANSACTION</a>. WITH CONSISTENT SNAPSHOT and level constraints.</li><li>Primary: <a href="https://www.microsoft.com/en-us/research/wp-content/uploads/2016/02/tr-95-51.pdf">Berenson et al., A Critique of ANSI SQL Isolation Levels (1995)</a>. Primary paper; snapshot isolation’s write-conflict rule is part of its definition.</li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0048-dirty-reads-dirty-writes-and-read-committed.html">Lesson 48</a><a href="0050-lost-updates.html">Lesson 50</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>

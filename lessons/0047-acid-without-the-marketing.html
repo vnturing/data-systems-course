@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ACID without the marketing · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-7-checklist.html">Module 7 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 7 · Lesson 47</p><h1>ACID without the marketing</h1><p class="lede">A transaction is a boundary around failure and interference. The letters ACID are useful only after you say what is inside that boundary, what concurrency is allowed, and which failures the commit survives.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Audit a transaction’s atomicity, invariants, isolation and durability independently, including a lost COMMIT reply and an external side effect.</div>
+
+<h2>1. Begin with a transfer, not the acronym</h2>
+<p>Two accounts start at 100 each. Moving 30 from A to B should leave 70 and 130. Write the invariant before the SQL: the total remains 200, neither balance becomes negative, and one operation identity corresponds to one transfer. A debit followed by a crash is a different failure from two concurrent overdraft decisions; “we use transactions” does not answer either one by itself.</p>
+<pre><code>START TRANSACTION;
+UPDATE accounts SET balance = balance - 30
+  WHERE id = 1 AND balance &gt;= 30;
+-- Application: require exactly one affected row, otherwise ROLLBACK.
+UPDATE accounts SET balance = balance + 30 WHERE id = 2;
+-- Application: require exactly one affected row again.
+COMMIT;</code></pre>
+<p>Assume InnoDB tables, one connection and existing distinct account IDs. An SQL transaction does not make a zero-row update an error. Checking the debit result matters: without it, a failed debit could still be followed by a credit. Checking the credit matters too. This is a transfer sketch; durable operation identity and response recovery still need designing.</p>
+<h2>2. A: abort the group</h2>
+<p>Atomicity lets the database discard an uncommitted group of changes. It prevents the durable half-transfer when the group aborts under the stated recovery contract. It does not imply each instruction runs at once or that other transactions cannot interleave. Undo, redo and recovery are implementation mechanisms, connected to <a href="0021-b-trees-pages-and-wal.html">Lesson 21</a>.</p>
+<p>Autocommit instead makes each update its own transaction. Both updates can individually be atomic while the pair is incomplete. In our real lab, an explicit rollback restores a changed counter from 70 to 100. That is an abort observation, not a power-loss experiment.</p>
+<div class="widget" id="sim-tx-acid"><noscript>This interactive needs JavaScript. The worked schedules and recorded results below remain readable.</noscript></div>
+<p><b>Try:</b> crash after only the debit, first with one transaction and then with autocommit. Next crash after COMMIT but before its reply. Finally choose volatile persistence after a success reply. The first changes grouping, the second changes client knowledge, and the third changes the assumed durability contract.</p>
+<h2>3. C: state the invariant and who enforces it</h2>
+<p>Consistency here means preserving declared application rules. The database can enforce a primary key, a foreign key or a supported check constraint; it cannot infer that your roster must keep one doctor on call. Correct single-transaction code and sufficient isolation are both necessary for rules involving concurrent decisions.</p>
+<p>A transaction that credits the wrong account can commit perfectly. A transaction that checks a sum and then updates a different row can race another equally reasonable transaction. Later lessons use those failures to separate programmer intent from guarantees the database actually implements.</p>
+<h2>4. I: which interleavings may commit?</h2>
+<p>Isolation constrains what concurrent transactions may observe and change. Serializable isolation asks whether the committed execution is equivalent to some one-at-a-time ordering. Weaker levels deliberately admit additional histories. A stable snapshot is valuable for a report, but does not by itself protect a decision spanning several rows.</p>
+<p>We will use MySQL 8.4’s named levels precisely, and compare selected PostgreSQL 18 behaviors. The names are not a portable substitute for an engine/version, read type and SQL schedule. This module begins on a single server so that replication lag and routing do not hide the concurrency mechanism.</p>
+<h2>5. D: which failure survives?</h2>
+<p>A commit contract must specify persistence settings and the failure domain. InnoDB’s commit-flush configuration, the binary log, storage behavior and replica acknowledgement are separate pieces. The MySQL experiment records its flush settings. It does not simulate host loss or claim that a local commit survives loss of the whole replica group. See the <a href="0033-single-leader-replication.html">acknowledgement boundary in Lesson 33</a>.</p>
+<p>A dropped connection during COMMIT is uncertainty. The commit may already exist. Blindly running the transfer again can duplicate it. Use an operation key with durable outcome lookup; do not classify every transport error as an abort.</p>
+<h2>6. Boundaries that escape</h2>
+<p>A Kafka publish, HTTP call or email sent between SQL statements is not rolled back by the database. An outbox can record the intended event in the same database transaction, followed by retryable publication and consumer deduplication. That is the boundary from <a href="0002-what-if-it-dies-right-here.html">Lesson 2</a>, now with explicit isolation requirements.</p>
+<p>Also inspect implicit boundaries. MySQL DDL can commit an existing transaction; wrapping schema changes in START TRANSACTION is not a general rollback strategy. Transactional data changes, schema operations and nontransactional tables need their documented contracts checked separately.</p>
+
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0047"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "The connection drops during COMMIT. Which conclusion is justified?",
+  "options": [
+   "The transaction certainly rolled back",
+   "The transaction certainly executed twice",
+   "The commit outcome remains uncertain",
+   "The database lost every account"
+  ],
+  "answer": 2,
+  "why": "A missing reply does not establish abort. Recover by operation identity and durable outcome, not a blind duplicate transfer."
+ },
+ {
+  "q": "Both updates use autocommit. What can a crash between them leave?",
+  "options": [
+   "Only the debit durably applied",
+   "Both statements automatically rolled back",
+   "The credit automatically retried forever",
+   "Every concurrent transfer fully serialized"
+  ],
+  "answer": 0,
+  "why": "Each statement has its own transaction boundary, so the pair can be incomplete."
+ },
+ {
+  "q": "The debit affects zero rows, but your handler credits B and commits. What fixes this?",
+  "options": [
+   "Increase every database connection timeout",
+   "Enable another asynchronous read replica",
+   "Rename the transaction isolation level",
+   "Validate outcomes and abort appropriately"
+  ],
+  "answer": 3,
+  "why": "SQL execution success is not the business predicate succeeding. The application must require the expected affected rows."
+ },
+ {
+  "q": "Why can a rolled-back SQL transaction still leave an email sent?",
+  "options": [
+   "Email delivery requires serializable isolation",
+   "External effects escape SQL rollback",
+   "Every notification shares database undo",
+   "Atomicity automatically reverses network messages"
+  ],
+  "answer": 1,
+  "why": "An external send is outside the database’s atomic boundary. An outbox records intent transactionally; delivery still needs appropriate retry semantics."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For one money or stock handler, list the transaction’s tables, expected affected rows, connection ownership, operation identity and external effects. State separately which failures an acknowledged commit must survive.</p></details><p>Ask the course agent about any unclear schedule. Include the engine/version, isolation level, exact SQL, transaction boundaries and observed responses.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/mysql-acid.html">InnoDB and the ACID Model</a>. Read as a list of configuration and subsystem obligations.</li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/implicit-commit.html">Statements That Cause an Implicit Commit</a>. </li><li>Primary: <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-parameters.html#sysvar_innodb_flush_log_at_trx_commit">Commit log flushing</a>. The widget declares its persistence assumption; it does not measure it.</li><li>Own evidence: <a href="../experiments/transactions/README.md">reproduction and limits</a>, <a href="../experiments/transactions/results/mysql-results.json">MySQL results</a> and <a href="../experiments/transactions/results/postgres-results.json">PostgreSQL results</a>. Browser models expose bounded mechanisms; they are not database implementations.</li></ol>
+<div class="pager"><a href="0046-request-routing-and-discovery.html">Lesson 46</a><a href="0048-dirty-reads-dirty-writes-and-read-committed.html">Lesson 48</a></div><footer class="foot">Original course material, grounded in the public sources cited. Logical event boundaries are not wall-clock timestamps. No production system is certified by these exercises.</footer></main><script src="../assets/sim-transactions.js"></script><script src="../assets/ui-transactions.js"></script></body></html>
