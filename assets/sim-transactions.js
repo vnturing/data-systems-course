@@ -13,7 +13,7 @@
       acknowledged:phase>=4,externalEffect:external&&phase>=1,events:events,
       why:!transactional?'Each autocommit statement has its own boundary; a crash between them can leave only the debit.':
         !committed?'The crash aborts the uncommitted database changes.':
-        !durable?'This scenario assumes acknowledged log bytes were only in volatile host memory. A host loss discards them.':
+        !durable?'This scenario assumes log bytes resided only in volatile host memory and were lost on host failure.':
         'The committed database transfer survives the assumed host crash, even if the reply was lost.'};
   }
   function reads(level){
@@ -76,7 +76,8 @@
     var blocks=mode==='range',snapshot=mode==='snapshot';
     return {before:0,after:blocks||snapshot?0:1,insertCommitted:!blocks,
       admitted:mode==='unique'||blocks?1:2,
-      why:blocks?'An indexed locking range read prevents this insert until the reader ends.':
+      why:blocks?'This InnoDB REPEATABLE READ gap-locking witness prevents the insert until the reader ends.':
+        mode==='range-rc'?'The InnoDB READ COMMITTED by_room locking range read does not protect the gap; the competing insert can commit.':
         snapshot?'The inserted row stays invisible to the old view, but that alone does not protect admission.':
         mode==='unique'?'Both can observe absence, but the unique constraint rejects one exact-slot insert.':
         'A later committed view sees the new match. The initial absence was not reserved.'};

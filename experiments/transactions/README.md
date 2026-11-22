@@ -11,7 +11,7 @@ Requirements: Python 3 standard library and Docker with the `mysql:8.4` and `pos
 python3 experiments/transactions/isolation.py /tmp/dsc-transactions-run
 ```
 
-The script creates uniquely named, labeled containers with `--network none`, no published ports and no host mounts. Clients execute inside the containers. Empty/trust authentication is confined to these disposable instances. Finally it removes only the containers it created and their anonymous volumes, including on an ordinary failure or interrupt. A force-killed Python process or Docker outage can prevent cleanup: inspect resources with the `dsc-course-experiment=m7` label before removing any leftovers.
+The script creates uniquely named, labeled containers with `--network none`, no published ports and no host mounts. Clients execute inside the containers. Empty/trust authentication is confined to these disposable instances. Finally it removes only the containers it created and their anonymous volumes, including on an ordinary failure or interrupt. Cleanup reports each failed removal or timeout and attempts every known container. It preserves an original experiment failure, or fails the run if cleanup alone fails. A force-killed Python process or Docker outage can prevent cleanup: inspect resources with the `dsc-course-experiment=m7` label before removing any leftovers.
 
 The supplied output directory receives `mysql-results.json`, `postgres-results.json` and the corresponding `*-transcript.json` files. Committed observations in `results/` were obtained using MySQL 8.4.13 and PostgreSQL 18.7 on Linux/arm64; image IDs and server versions are recorded. Tags can advance. Compare your results with these fixtures instead of silently replacing them. No third-party Python driver is required.
 
@@ -29,7 +29,7 @@ MySQL (17 schedules):
 - Two-doctor write skew leaves zero on call. A shared guard followed by fresh read-committed validation leaves one. The corrected schedule runs A then B; it validates the ordered decisions, not a throughput claim or audit of every writer.
 - A committed insertion changes a read-committed predicate count 2→3; the old repeatable-read view stays 2→2.
 - An indexed repeatable-read locking range blocks a matching insertion until error 1205.
-- A real opposite-order lock cycle triggers error 1213. The harness observes the first waiting edge before creating the second; victim choice may vary.
+- A real opposite-order lock cycle triggers error 1213. The harness observes the first waiting edge before creating the second, joins the worker and propagates its failures, then requires one deadlock outcome and one completed request; either request may be the victim.
 
 PostgreSQL (3 schedules):
 
@@ -39,7 +39,7 @@ PostgreSQL (3 schedules):
 
 ## Harness details and mistakes preserved
 
-Each A/B client is persistent. Every query ends with a unique response marker, so the next step waits for an actual response. Expected SQL errors are recorded and asserted. MySQL force mode keeps its client alive after an expected error. A queue gives each query a bounded response deadline; server-side statement/lock timeouts keep intentional waits finite.
+Each A/B client is persistent. The transcript records a `submit` event with the session, SQL and command ID before writing the request, then a separate `complete` event with the same ID and server output after receiving its unique response marker. Event-list order distinguishes pending requests from completed responses, including the overlapping deadlock requests. A submission without a completion remains pending. Expected SQL errors are recorded and asserted. MySQL force mode keeps its client alive after an expected error. A queue gives each query a bounded response deadline; server-side statement/lock timeouts keep intentional waits finite.
 
 Client stderr is redirected into stdout **inside** the container before Docker transports the output. Merging only at the host was an incorrect first implementation: Docker's separate stream delivery could expose the success marker before the error, making an SSI commit look successful. A separate transaction-ID/predicate-lock probe exposed the harness bug. The final observations use the corrected stream ordering. PostgreSQL readiness checks TCP to avoid mistaking its temporary initialization server for the final instance.
 

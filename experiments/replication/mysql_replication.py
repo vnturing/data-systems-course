@@ -44,15 +44,16 @@ try:
     docker('network', 'create', '--internal', '--label', 'dsc-course-experiment=m5', network)
     net_created = True
     for ident, (key, name) in enumerate(nodes.items(), 1):
-        args = ['run', '-d', '--name', name, '--network', network, '--label', 'dsc-course-experiment=m5',
+        args = ['create', '--name', name, '--network', network, '--label', 'dsc-course-experiment=m5',
                 '-e', 'MYSQL_ALLOW_EMPTY_PASSWORD=yes', 'mysql:8.4', '--server-id=' + str(ident),
                 '--log-bin=binlog', '--relay-log=relay', '--gtid-mode=ON', '--enforce-gtid-consistency=ON',
                 '--binlog-format=ROW', '--sync-binlog=1', '--innodb-flush-log-at-trx-commit=1',
                 '--innodb-buffer-pool-size=67108864']
         if key != 'source':
             args += ['--read-only=ON', '--log-replica-updates=ON']
-        docker(*args)
-        created.append(name)
+        container_id = docker(*args)
+        created.append(container_id)
+        docker('start', container_id)
     for key in nodes:
         until(lambda key=key: sql(key, 'SELECT 1') == '1', key + ' startup', 90)
     version = sql('source', 'SELECT VERSION()')

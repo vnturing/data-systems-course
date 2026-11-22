@@ -1,906 +1,2019 @@
 [
   {
+    "event": "submit",
+    "command_id": "A:1",
     "session": "A",
-    "sql": "USE m7; SET SESSION innodb_lock_wait_timeout=1;",
+    "sql": "USE m7; SET SESSION innodb_lock_wait_timeout=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:1",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:1",
     "session": "B",
-    "sql": "USE m7; SET SESSION innodb_lock_wait_timeout=1;",
+    "sql": "USE m7; SET SESSION innodb_lock_wait_timeout=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:1",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:2",
     "session": "A",
-    "sql": "SELECT VERSION();",
+    "sql": "SELECT VERSION();"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:2",
+    "session": "A",
     "output": [
       "8.4.13"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:3",
     "session": "A",
-    "sql": "SELECT @@transaction_isolation,@@innodb_flush_log_at_trx_commit,@@sync_binlog,@@innodb_rollback_on_timeout;",
+    "sql": "SELECT @@transaction_isolation,@@innodb_flush_log_at_trx_commit,@@sync_binlog,@@innodb_rollback_on_timeout;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:3",
+    "session": "A",
     "output": [
       "REPEATABLE-READ\t1\t1\t0"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:4",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:4",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:5",
     "session": "A",
-    "sql": "UPDATE counter SET v=70; ROLLBACK;",
+    "sql": "UPDATE counter SET v=70; ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:5",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:2",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:2",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:6",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:6",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:3",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:3",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:7",
     "session": "A",
-    "sql": "UPDATE counter SET v=900 WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:7",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:8",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:8",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:4",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ UNCOMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:4",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:9",
+    "session": "A",
+    "sql": "UPDATE counter SET v=900 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:9",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:5",
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:5",
+    "session": "B",
     "output": [
       "900"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:10",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:10",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:6",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:6",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:7",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:7",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:11",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:11",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:8",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:8",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:12",
     "session": "A",
-    "sql": "UPDATE counter SET v=900 WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:12",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:13",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:13",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:9",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:9",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:14",
+    "session": "A",
+    "sql": "UPDATE counter SET v=900 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:14",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:10",
+    "session": "B",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:10",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:15",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:15",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:11",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:11",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:12",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:12",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:16",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:16",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:13",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:13",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:17",
     "session": "A",
-    "sql": "UPDATE counter SET v=900 WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:17",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:18",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:18",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:14",
     "session": "B",
-    "sql": "UPDATE counter SET v=200 WHERE id=1;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:14",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:19",
+    "session": "A",
+    "sql": "UPDATE counter SET v=900 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:19",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:15",
+    "session": "B",
+    "sql": "UPDATE counter SET v=200 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:15",
+    "session": "B",
     "output": [
       "ERROR 1205 (HY000) at line 29: Lock wait timeout exceeded; try restarting transaction"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:16",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:16",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:20",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:20",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:17",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:17",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:21",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:21",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:18",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:18",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:22",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:22",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:23",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:23",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:24",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:24",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:19",
     "session": "B",
-    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:19",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:25",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:25",
+    "session": "A",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:26",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:26",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:20",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:20",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:27",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:27",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:28",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:28",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:29",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:29",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:21",
     "session": "B",
-    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:21",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:30",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:30",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:31",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:31",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:22",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:22",
     "session": "B",
-    "sql": "UPDATE counter SET v=110 WHERE id=1;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:32",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:32",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:33",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:33",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:23",
+    "session": "B",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:23",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:34",
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:34",
+    "session": "A",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:24",
     "session": "B",
-    "sql": "UPDATE counter SET v=120 WHERE id=1;",
+    "sql": "UPDATE counter SET v=120 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:24",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:35",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:35",
+    "session": "A",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:36",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;",
+    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:36",
+    "session": "A",
     "output": [
       "120"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:37",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:37",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:25",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:25",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:38",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:38",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:39",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:39",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:26",
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:26",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:40",
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:40",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:27",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:27",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:41",
     "session": "A",
-    "sql": "UPDATE counter SET v=110 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; SELECT ROW_COUNT(); COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:41",
+    "session": "A",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:28",
     "session": "B",
-    "sql": "UPDATE counter SET v=110 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; SELECT ROW_COUNT(); COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:28",
+    "session": "B",
     "output": [
       "0"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:42",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:42",
+    "session": "A",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:43",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:43",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:29",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:29",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:44",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:44",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:45",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:45",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:30",
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:30",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:46",
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:46",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:31",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:31",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:47",
     "session": "A",
-    "sql": "UPDATE counter SET v=v+10 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "sql": "UPDATE counter SET v=v+10 WHERE id=1; SELECT ROW_COUNT(); COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:47",
+    "session": "A",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:32",
     "session": "B",
-    "sql": "UPDATE counter SET v=v+10 WHERE id=1; SELECT ROW_COUNT(); COMMIT;",
+    "sql": "UPDATE counter SET v=v+10 WHERE id=1; SELECT ROW_COUNT(); COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:32",
+    "session": "B",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:48",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:48",
+    "session": "A",
     "output": [
       "120"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:49",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:49",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:33",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:33",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:50",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:50",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:51",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:51",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:34",
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:34",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:52",
+    "session": "A",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:52",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:35",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:35",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:53",
     "session": "A",
-    "sql": "UPDATE counter SET v=110,version=version+1 WHERE id=1 AND version=1; SELECT ROW_COUNT(); COMMIT;",
+    "sql": "UPDATE counter SET v=110,version=version+1 WHERE id=1 AND version=1; SELECT ROW_COUNT(); COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:53",
+    "session": "A",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:36",
     "session": "B",
-    "sql": "UPDATE counter SET v=110,version=version+1 WHERE id=1 AND version=1; SELECT ROW_COUNT(); COMMIT;",
+    "sql": "UPDATE counter SET v=110,version=version+1 WHERE id=1 AND version=1; SELECT ROW_COUNT(); COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:36",
+    "session": "B",
     "output": [
       "0"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:54",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:54",
+    "session": "A",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:55",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:55",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:37",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:37",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:56",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:56",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:57",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:57",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:58",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;",
+    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:58",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:59",
     "session": "A",
-    "sql": "UPDATE counter SET v=110 WHERE id=1; COMMIT;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:59",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:38",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:38",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:39",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;",
+    "sql": "SELECT v FROM counter WHERE id=1 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:39",
+    "session": "B",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:40",
     "session": "B",
-    "sql": "UPDATE counter SET v=120 WHERE id=1; COMMIT;",
+    "sql": "UPDATE counter SET v=120 WHERE id=1; COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:40",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:60",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:60",
+    "session": "A",
     "output": [
       "120"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:61",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:61",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:41",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:41",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:62",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:62",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:63",
+    "session": "A",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:63",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:42",
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:42",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:64",
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:64",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:43",
     "session": "B",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:43",
+    "session": "B",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:65",
     "session": "A",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=1; COMMIT;",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1; COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:65",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:44",
     "session": "B",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=2; COMMIT;",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=2; COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:44",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:66",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:66",
+    "session": "A",
     "output": [
       "0"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:67",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:67",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:45",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:45",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:68",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:68",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:69",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:69",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:70",
     "session": "A",
-    "sql": "SELECT id FROM guard WHERE id=1 FOR UPDATE;",
+    "sql": "SELECT id FROM guard WHERE id=1 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:70",
+    "session": "A",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:71",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:71",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:72",
     "session": "A",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;",
-    "output": []
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;"
   },
   {
+    "event": "complete",
+    "command_id": "A:72",
     "session": "A",
-    "sql": "COMMIT;",
     "output": []
   },
   {
-    "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "event": "submit",
+    "command_id": "A:73",
+    "session": "A",
+    "sql": "COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:73",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:46",
     "session": "B",
-    "sql": "SELECT id FROM guard WHERE id=1 FOR UPDATE;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:46",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:47",
+    "session": "B",
+    "sql": "SELECT id FROM guard WHERE id=1 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:47",
+    "session": "B",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:48",
     "session": "B",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:48",
+    "session": "B",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:49",
     "session": "B",
-    "sql": "COMMIT;",
+    "sql": "COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:49",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:74",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:74",
+    "session": "A",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:75",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:75",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:50",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:50",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:76",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:76",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:77",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:77",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:78",
     "session": "A",
-    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:78",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:51",
     "session": "B",
-    "sql": "INSERT INTO bookings VALUES(3,15);",
+    "sql": "INSERT INTO bookings VALUES(3,15);"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:51",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:79",
     "session": "A",
-    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:79",
+    "session": "A",
     "output": [
       "3"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:80",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:80",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:52",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:52",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:81",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:81",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:82",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:82",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:83",
     "session": "A",
-    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:83",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:53",
     "session": "B",
-    "sql": "INSERT INTO bookings VALUES(3,15);",
+    "sql": "INSERT INTO bookings VALUES(3,15);"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:53",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:84",
     "session": "A",
-    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;",
+    "sql": "SELECT COUNT(*) FROM bookings WHERE room>=10 AND room<30;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:84",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:85",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:85",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:54",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:54",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:86",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:86",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:87",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:87",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:88",
     "session": "A",
-    "sql": "SELECT id FROM bookings FORCE INDEX(by_room) WHERE room>=10 AND room<30 FOR UPDATE;",
+    "sql": "SELECT id FROM bookings FORCE INDEX(by_room) WHERE room>=10 AND room<30 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:88",
+    "session": "A",
     "output": [
       "1",
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:55",
     "session": "B",
-    "sql": "INSERT INTO bookings VALUES(3,15);",
+    "sql": "INSERT INTO bookings VALUES(3,15);"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:55",
+    "session": "B",
     "output": [
       "ERROR 1205 (HY000) at line 109: Lock wait timeout exceeded; try restarting transaction"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:89",
     "session": "A",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:89",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:56",
     "session": "B",
-    "sql": "ROLLBACK;",
-    "output": []
+    "sql": "ROLLBACK;"
   },
   {
-    "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
-    "output": []
-  },
-  {
-    "session": "A",
-    "sql": "SET SESSION innodb_lock_wait_timeout=10;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:56",
     "session": "B",
-    "sql": "SET SESSION innodb_lock_wait_timeout=10;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:90",
     "session": "A",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:90",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:91",
+    "session": "A",
+    "sql": "SET SESSION innodb_lock_wait_timeout=10;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:91",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:57",
     "session": "B",
-    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;",
+    "sql": "SET SESSION innodb_lock_wait_timeout=10;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:57",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:92",
     "session": "A",
-    "sql": "SELECT id FROM doctors WHERE id=1 FOR UPDATE;",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:92",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:58",
+    "session": "B",
+    "sql": "SET SESSION TRANSACTION ISOLATION LEVEL REPEATABLE READ; START TRANSACTION;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:58",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:93",
+    "session": "A",
+    "sql": "SELECT id FROM doctors WHERE id=1 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:93",
+    "session": "A",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:59",
     "session": "B",
-    "sql": "SELECT id FROM doctors WHERE id=2 FOR UPDATE;",
+    "sql": "SELECT id FROM doctors WHERE id=2 FOR UPDATE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:59",
+    "session": "B",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:94",
     "session": "A",
-    "sql": "SELECT CONNECTION_ID();",
+    "sql": "SELECT CONNECTION_ID();"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:94",
+    "session": "A",
     "output": [
       "10"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:95",
+    "session": "A",
+    "sql": "SELECT id FROM doctors WHERE id=2 FOR UPDATE;"
+  },
+  {
+    "event": "submit",
+    "command_id": "wait-observer:1",
     "session": "wait-observer",
-    "sql": "SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.threads t ON w.REQUESTING_THREAD_ID=t.THREAD_ID WHERE t.PROCESSLIST_ID=10;",
+    "sql": "SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.threads t ON w.REQUESTING_THREAD_ID=t.THREAD_ID WHERE t.PROCESSLIST_ID=10;"
+  },
+  {
+    "event": "complete",
+    "command_id": "wait-observer:1",
+    "session": "wait-observer",
     "output": [
       "1"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:60",
     "session": "B",
-    "sql": "SELECT id FROM doctors WHERE id=1 FOR UPDATE;",
-    "output": [
-      "ERROR 1213 (40001) at line 119: Deadlock found when trying to get lock; try restarting transaction"
-    ]
+    "sql": "SELECT id FROM doctors WHERE id=1 FOR UPDATE;"
   },
   {
+    "event": "complete",
+    "command_id": "A:95",
     "session": "A",
-    "sql": "SELECT id FROM doctors WHERE id=2 FOR UPDATE;",
     "output": [
       "2"
     ]
   },
   {
-    "session": "A",
-    "sql": "ROLLBACK;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:60",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "output": [
+      "ERROR 1213 (40001) at line 119: Deadlock found when trying to get lock; try restarting transaction"
+    ]
+  },
+  {
+    "event": "submit",
+    "command_id": "A:96",
+    "session": "A",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:96",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:61",
+    "session": "B",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:61",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:97",
     "session": "A",
-    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;",
+    "sql": "UPDATE counter SET v=100,version=1; UPDATE doctors SET on_call=1; DELETE FROM bookings WHERE id>2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:97",
+    "session": "A",
     "output": []
   }
 ]

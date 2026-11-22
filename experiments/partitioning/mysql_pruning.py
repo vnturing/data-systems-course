@@ -18,7 +18,7 @@ def docker(*args, input=None):
 def sql(s):
     return docker('exec', '-i', name, 'mysql', '--protocol=TCP', '-h127.0.0.1', '-uroot', '--batch', '--raw', '--skip-column-names', input=s)
 try:
-    docker('run','-d','--name',name,'--network','none','--label','dsc-course-experiment=m6','-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','mysql:8.4','--innodb-buffer-pool-size=67108864')
+    docker('run','-d','--name',name,'--network','none','--label','dsc-course-experiment=m6','-e','MYSQL_ALLOW_EMPTY_PASSWORD=yes','mysql:8.4.13','--innodb-buffer-pool-size=67108864')
     created = True
     for _ in range(300):
         try:

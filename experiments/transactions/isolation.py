@@ -5,6 +5,7 @@ Run: python3 experiments/transactions/isolation.py OUTPUT_DIRECTORY
 Only uniquely named, private, disposable containers created here are touched.
 """
 import json
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 import queue
 import subprocess
@@ -21,9 +22,16 @@ def docker(*args):
     return p.stdout.strip()
 
 
+class QueryError(RuntimeError):
+    def __init__(self, sql, output):
+        super().__init__(sql, output)
+        self.output = output
+
+
 class Session:
     def __init__(self, container, engine, label, transcript):
         self.engine, self.label, self.transcript = engine, label, transcript
+        self.command_count = 0
         cli = (['mysql', '--protocol=TCP', '-h127.0.0.1', '-uroot', '-NB',
                 '--raw', '--unbuffered', '--force'] if engine == 'mysql' else
                ['psql', '-X', '-qAt', '-U', 'postgres', '-d', 'postgres'])
@@ -43,6 +51,10 @@ class Session:
     def run(self, sql, error=None):
         marker = '__dsc_' + uuid.uuid4().hex
         end = "SELECT '" + marker + "';" if self.engine == 'mysql' else '\\echo ' + marker
+        self.command_count += 1
+        command_id = self.label + ':' + str(self.command_count)
+        self.transcript.append({'event':'submit', 'command_id':command_id,
+                                'session':self.label, 'sql':sql})
         self.p.stdin.write(sql + '\n' + end + '\n')
         self.p.stdin.flush()
         rows = []
@@ -57,12 +69,13 @@ class Session:
             if line == marker:
                 break
             rows.append(line)
-        self.transcript.append({'session': self.label, 'sql': sql, 'output': rows})
+        self.transcript.append({'event':'complete', 'command_id':command_id,
+                                'session':self.label, 'output':rows})
         errors = [r for r in rows if r.startswith('ERROR')]
         if error:
             assert any(error in r for r in errors), (sql, error, rows, self.transcript[-12:])
-        else:
-            assert not errors, (sql, rows)
+        elif errors:
+            raise QueryError(sql, rows)
         return rows
 
     def close(self):
@@ -74,6 +87,52 @@ class Session:
                 self.p.kill()
                 self.p.wait(timeout=5)
         self.p.stdout.close()
+
+
+def deadlock_case(a, b, waiter):
+    def request(session, sql):
+        try:
+            session.run(sql)
+        except QueryError as exc:
+            errors = [row for row in exc.output if row.startswith('ERROR')]
+            if len(errors) != 1 or not errors[0].startswith('ERROR 1213 '):
+                raise
+            return 'deadlock'
+        return 'completed'
+
+    observer_id = a.run('SELECT CONNECTION_ID();')[0]
+    with ThreadPoolExecutor(max_workers=1) as worker:
+        pending = worker.submit(request, a, 'SELECT id FROM doctors WHERE id=2 FOR UPDATE;')
+        try:
+            deadline = time.monotonic()+5
+            while time.monotonic()<deadline:
+                waiting = waiter.run('SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.threads t ON w.REQUESTING_THREAD_ID=t.THREAD_ID WHERE t.PROCESSLIST_ID='+observer_id+';')
+                if waiting == ['1']: break
+            else: raise RuntimeError('Did not observe the first deadlock edge')
+            other = request(b, 'SELECT id FROM doctors WHERE id=1 FOR UPDATE;')
+        finally:
+            # Join and propagate worker failures before either session is reused.
+            first = pending.result(timeout=15)
+    assert sorted([first,other]) == ['completed','deadlock'], (first,other)
+    return {'error':1213, 'victim':'A' if first=='deadlock' else 'B'}
+
+
+def cleanup_containers(created):
+    failed = []
+    for name in created:
+        try:
+            result = subprocess.run(['docker','rm','-fv',name],capture_output=True,text=True,timeout=60)
+        except subprocess.TimeoutExpired:
+            detail = 'timed out after 60 seconds'
+        except OSError as exc:
+            detail = str(exc)
+        else:
+            if result.returncode == 0:
+                continue
+            detail = 'exit '+str(result.returncode)+': '+(result.stderr+result.stdout)[-1000:].strip()
+        failed.append(name)
+        print('Container cleanup failed for '+name+': '+detail,file=sys.stderr)
+    return failed
 
 
 def mysql_cases(name):
@@ -183,25 +242,7 @@ def mysql_cases(name):
         b.run('SELECT id FROM doctors WHERE id=2 FOR UPDATE;')
         # Observe a real wait before forming the cycle, not a timing-based guess.
         waiter = Session(name,'mysql','wait-observer',trace); sessions.append(waiter)
-        observer_id = a.run('SELECT CONNECTION_ID();')[0]
-        pending = []
-        # Either participant can be victim. Collect raw errors here and assert below.
-        original = a.run
-        def wait_query():
-            try: pending.append(original('SELECT id FROM doctors WHERE id=2 FOR UPDATE;'))
-            except AssertionError as e: pending.append(str(e))
-        thread = threading.Thread(target=wait_query); thread.start()
-        deadline = time.monotonic()+5
-        while time.monotonic()<deadline:
-            waiting = waiter.run('SELECT COUNT(*) FROM performance_schema.data_lock_waits w JOIN performance_schema.threads t ON w.REQUESTING_THREAD_ID=t.THREAD_ID WHERE t.PROCESSLIST_ID='+observer_id+';')
-            if waiting == ['1']: break
-        else: raise RuntimeError('Did not observe the first deadlock edge')
-        try: other = b.run('SELECT id FROM doctors WHERE id=1 FOR UPDATE;')
-        except AssertionError as e: other = str(e)
-        thread.join(timeout=10)
-        assert not thread.is_alive()
-        assert '1213' in str(pending)+str(other), (pending,other)
-        cases['deadlock'] = {'error':1213,'victim':'A' if '1213' in str(pending) else 'B'}
+        cases['deadlock'] = deadlock_case(a, b, waiter)
         reset()
         assert cases['write_skew']['remaining']==0
         assert cases['guard_row']=={'counts':[2,1],'remaining':1}
@@ -270,8 +311,10 @@ def main():
             (out/(engine+'-transcript.json')).write_text(json.dumps(trace,indent=2)+'\n')
             print(engine+': '+str(len(result['cases']))+' schedules verified',flush=True)
     finally:
-        for name in created:
-            subprocess.run(['docker','rm','-fv',name],capture_output=True,timeout=60)
+        experiment_failed = sys.exc_info()[0] is not None
+        failed = cleanup_containers(created)
+        if failed and not experiment_failed:
+            raise RuntimeError('Could not remove experiment containers: '+', '.join(failed))
 
 
 if __name__=='__main__': main()

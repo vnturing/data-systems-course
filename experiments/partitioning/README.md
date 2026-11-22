@@ -11,7 +11,7 @@ python3 experiments/partitioning/mysql_pruning.py /tmp/dsc-m6-mysql-results
 python3 experiments/partitioning/redis_cluster.py /tmp/dsc-m6-redis-results
 ```
 
-Requires Docker with `mysql:8.4` and `redis:7.4`. Tested versions are **MySQL 8.4.13** and **Redis 7.4.12**, Linux/arm64 containers under Colima on macOS. Tags move; actual versions are preserved in the committed fixtures. Scripts do not access host databases or publish ports. Each owns only the resources it successfully creates, labeled `dsc-course-experiment=m6`, and removes them in `finally`, including anonymous data volumes. MySQL has no Docker network; Redis uses a private internal bridge. A name collision fails instead of reusing a server. External termination can bypass `finally`; inspect ownership labels before removing leftovers.
+Requires Docker with `mysql:8.4.13` and `redis:7.4.12`, pinned to the tested versions: **MySQL 8.4.13** and **Redis 7.4.12**, Linux/arm64 containers under Colima on macOS. Actual versions are also preserved in the committed fixtures. Scripts do not access host databases or publish ports. Each owns only the resources it successfully creates, labeled `dsc-course-experiment=m6`, and removes them in `finally`, including anonymous data volumes. MySQL has no Docker network; Redis uses a private internal bridge. A name collision fails instead of reusing a server. External termination can bypass `finally`; inspect ownership labels before removing leftovers.
 
 ### MySQL: local table partitioning
 

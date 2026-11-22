@@ -30,12 +30,32 @@ assert.deepEqual(p.write_skew_ssi,{counts:[2,2],remaining:1,commit_error:'40001'
 for(const engine of ['mysql','postgres']){
  const trace=require('../experiments/transactions/results/'+engine+'-transcript.json');
  assert.ok(trace.some(r=>r.session==='A'));assert.ok(trace.some(r=>r.session==='B'));
- assert.ok(trace.every(r=>typeof r.sql==='string'&&Array.isArray(r.output)));
- const errors=trace.flatMap(r=>r.output).filter(r=>r.startsWith('ERROR'));
+ const submitted=new Map(),completed=new Set(),pending=new Map();
+ for(const event of trace){
+  assert.equal(typeof event.command_id,'string');
+  if(event.event==='submit'){
+   assert.equal(typeof event.sql,'string');assert.ok(!submitted.has(event.command_id));
+   assert.ok(!pending.has(event.session),'a session cannot reuse a pending connection');
+   submitted.set(event.command_id,event);pending.set(event.session,event.command_id);
+  }else{
+   assert.equal(event.event,'complete');assert.ok(Array.isArray(event.output));
+   assert.ok(!completed.has(event.command_id));
+   assert.equal(pending.get(event.session),event.command_id);
+   assert.equal(submitted.get(event.command_id).session,event.session);
+   completed.add(event.command_id);pending.delete(event.session);
+  }
+ }
+ assert.equal(completed.size,submitted.size);assert.equal(pending.size,0);
+ const errors=trace.filter(r=>r.event==='complete').flatMap(r=>r.output).filter(r=>r.startsWith('ERROR'));
  if(engine==='mysql'){
   assert.equal(errors.filter(r=>r.includes('1205')).length,2);
   assert.equal(errors.filter(r=>r.includes('1213')).length,1);
   assert.equal(errors.length,3);
+  const first=trace.findIndex(r=>r.event==='submit'&&r.session==='A'&&r.sql==='SELECT id FROM doctors WHERE id=2 FOR UPDATE;');
+  const other=trace.findIndex(r=>r.event==='submit'&&r.session==='B'&&r.sql==='SELECT id FROM doctors WHERE id=1 FOR UPDATE;');
+  const done=trace.findIndex(r=>r.event==='complete'&&r.command_id===trace[first].command_id);
+  assert.ok(first>=0&&first<other&&other<done,'the second request must start while the first is pending');
+  assert.ok(trace.slice(first,other).some(r=>r.session==='wait-observer'&&r.event==='complete'&&r.output[0]==='1'));
  }else{
   assert.equal(errors.filter(r=>r.includes('40001')).length,2);
   assert.equal(errors.length,2);
@@ -53,6 +73,12 @@ for(const tx of [false,true])for(const phase of [0,1,2,3,4])for(const durable of
 assert.deepEqual(S.transfer(false,1,true,false).balances,[70,100]);
 assert.deepEqual(S.transfer(true,3,true,false).balances,[70,130]);
 assert.equal(S.transfer(true,3,true,false).acknowledged,false);
+for(const phase of [3,4]){
+ const r=S.transfer(true,phase,false,false);
+ assert.match(r.why,/only in volatile host memory/);
+ assert.doesNotMatch(r.why,/acknowledged|reply/);
+ assert.equal(r.acknowledged,phase===4);
+}
 assert.deepEqual(S.reads('ru').values,[900,100,110]);
 assert.deepEqual(S.reads('rc').values,[100,100,110]);
 assert.deepEqual(S.reads('rr').values,[100,100,100]);
@@ -87,6 +113,10 @@ for(const order of [[0,1],[1,0]]){const doctors=[1,1];for(const d of order)if(do
 assert.equal(S.phantom('snapshot').after,0);assert.equal(S.phantom('snapshot').insertCommitted,true);
 assert.equal(S.phantom('snapshot').admitted,2);assert.equal(S.phantom('unique').admitted,1);
 assert.equal(S.phantom('range').insertCommitted,false);
+assert.equal(S.phantom('range-rc').insertCommitted,true);
+assert.equal(S.phantom('range-rc').after,1);
+assert.equal(S.phantom('range-rc').admitted,2);
+assert.match(S.phantom('range').why,/REPEATABLE READ gap-locking/);
 assert.equal(S.locks('opposite',false).deadlock,true);assert.equal(S.locks('same',true).deadlock,false);
 assert.equal(S.serial('snapshot').safe,false);assert.equal(S.serial('ssi').safe,true);assert.equal(S.serial('serial').safe,true);
 assert.equal(S.recommendation('roster','snapshot').fits,false);
@@ -101,7 +131,7 @@ for(const lesson of lessons){
  for(const asset of ['sim-transactions.js','ui-transactions.js','quiz.js'])assert.ok(html.includes(asset));
  assert.match(html,/<noscript>/);assert.match(html,/module-7-checklist\.html/);
  const quiz=JSON.parse(html.match(/id="quiz-data">([\s\S]*?)<\/script>/)[1]);assert.equal(quiz.length,4);
- for(const q of quiz){assert.equal(q.options.length,4);assert.ok(q.answer>=0&&q.answer<4);assert.ok(q.why);}
+ for(const q of quiz){assert.equal(q.options.length,4);assert.ok(Number.isInteger(q.answer)&&q.answer>=0&&q.answer<4);assert.ok(q.why);}
  if(lesson.startsWith('0054')){
   const embedded=JSON.parse(html.match(/id="transaction-observations">([\s\S]*?)<\/script>/)[1]);
   assert.deepEqual(embedded,{mysql:M,postgres:P});

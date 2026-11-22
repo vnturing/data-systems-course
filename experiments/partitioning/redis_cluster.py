@@ -29,7 +29,7 @@ def obj(x):return x if isinstance(x,dict) else dict(zip(x[::2],x[1::2]))
 try:
     docker('network','create','--internal','--label','dsc-course-experiment=m6',network);net_created=True
     for name in names:
-        docker('run','-d','--name',name,'--network',network,'--label','dsc-course-experiment=m6','redis:7.4',
+        docker('run','-d','--name',name,'--network',network,'--label','dsc-course-experiment=m6','redis:7.4.12',
                'redis-server','--cluster-enabled','yes','--cluster-config-file','nodes.conf',
                '--cluster-node-timeout','5000','--appendonly','no','--save','')
         created.append(name)

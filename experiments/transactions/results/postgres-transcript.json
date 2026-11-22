@@ -1,211 +1,463 @@
 [
   {
+    "event": "submit",
+    "command_id": "A:1",
     "session": "A",
-    "sql": "\\set VERBOSITY verbose\nSET statement_timeout=5000;",
+    "sql": "\\set VERBOSITY verbose\nSET statement_timeout=5000;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:1",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:1",
     "session": "B",
-    "sql": "\\set VERBOSITY verbose\nSET statement_timeout=5000;",
+    "sql": "\\set VERBOSITY verbose\nSET statement_timeout=5000;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:1",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:2",
     "session": "A",
-    "sql": "SHOW server_version;",
+    "sql": "SHOW server_version;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:2",
+    "session": "A",
     "output": [
       "18.7"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:3",
     "session": "A",
-    "sql": "CREATE TABLE doctors(id INT PRIMARY KEY,on_call INT); INSERT INTO doctors VALUES(1,1),(2,1);",
+    "sql": "CREATE TABLE doctors(id INT PRIMARY KEY,on_call INT); INSERT INTO doctors VALUES(1,1),(2,1);"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:3",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:4",
     "session": "A",
-    "sql": "CREATE TABLE counter(id INT PRIMARY KEY,v INT); INSERT INTO counter VALUES(1,100);",
+    "sql": "CREATE TABLE counter(id INT PRIMARY KEY,v INT); INSERT INTO counter VALUES(1,100);"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:4",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:5",
     "session": "A",
-    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:5",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:2",
     "session": "B",
-    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:2",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:6",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:6",
+    "session": "A",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:3",
     "session": "B",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:3",
+    "session": "B",
     "output": [
       "100"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:7",
     "session": "A",
-    "sql": "UPDATE counter SET v=110 WHERE id=1; COMMIT;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1; COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:7",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:4",
     "session": "B",
-    "sql": "UPDATE counter SET v=110 WHERE id=1;",
+    "sql": "UPDATE counter SET v=110 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:4",
+    "session": "B",
     "output": [
       "ERROR:  40001: could not serialize access due to concurrent update",
       "LOCATION:  ExecUpdate, nodeModifyTable.c:2610"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:5",
     "session": "B",
-    "sql": "ROLLBACK;",
+    "sql": "ROLLBACK;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:5",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:8",
     "session": "A",
-    "sql": "SELECT v FROM counter WHERE id=1;",
+    "sql": "SELECT v FROM counter WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:8",
+    "session": "A",
     "output": [
       "110"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:9",
     "session": "A",
-    "sql": "UPDATE doctors SET on_call=1;",
+    "sql": "UPDATE doctors SET on_call=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:9",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:10",
     "session": "A",
-    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:10",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:11",
     "session": "A",
-    "sql": "SHOW transaction_isolation;",
+    "sql": "SHOW transaction_isolation;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:11",
+    "session": "A",
     "output": [
       "repeatable read"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:6",
     "session": "B",
-    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;",
+    "sql": "BEGIN ISOLATION LEVEL REPEATABLE READ;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:6",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:7",
     "session": "B",
-    "sql": "SHOW transaction_isolation;",
+    "sql": "SHOW transaction_isolation;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:7",
+    "session": "B",
     "output": [
       "repeatable read"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:12",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:12",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:8",
     "session": "B",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:8",
+    "session": "B",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:13",
     "session": "A",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:13",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:9",
     "session": "B",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=2;",
-    "output": []
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=2;"
   },
   {
-    "session": "A",
-    "sql": "COMMIT;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "B:9",
     "session": "B",
-    "sql": "COMMIT;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:14",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:14",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:10",
+    "session": "B",
+    "sql": "COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:10",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:15",
+    "session": "A",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:15",
+    "session": "A",
     "output": [
       "0"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:16",
     "session": "A",
-    "sql": "UPDATE doctors SET on_call=1;",
+    "sql": "UPDATE doctors SET on_call=1;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:16",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:17",
     "session": "A",
-    "sql": "BEGIN ISOLATION LEVEL SERIALIZABLE;",
+    "sql": "BEGIN ISOLATION LEVEL SERIALIZABLE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:17",
+    "session": "A",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "A:18",
     "session": "A",
-    "sql": "SHOW transaction_isolation;",
+    "sql": "SHOW transaction_isolation;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:18",
+    "session": "A",
     "output": [
       "serializable"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:11",
     "session": "B",
-    "sql": "BEGIN ISOLATION LEVEL SERIALIZABLE;",
+    "sql": "BEGIN ISOLATION LEVEL SERIALIZABLE;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:11",
+    "session": "B",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:12",
     "session": "B",
-    "sql": "SHOW transaction_isolation;",
+    "sql": "SHOW transaction_isolation;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:12",
+    "session": "B",
     "output": [
       "serializable"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:19",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:19",
+    "session": "A",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "B:13",
     "session": "B",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:13",
+    "session": "B",
     "output": [
       "2"
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:20",
     "session": "A",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;",
-    "output": []
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=1;"
   },
   {
-    "session": "B",
-    "sql": "UPDATE doctors SET on_call=0 WHERE id=2;",
-    "output": []
-  },
-  {
+    "event": "complete",
+    "command_id": "A:20",
     "session": "A",
-    "sql": "COMMIT;",
     "output": []
   },
   {
+    "event": "submit",
+    "command_id": "B:14",
     "session": "B",
-    "sql": "COMMIT;",
+    "sql": "UPDATE doctors SET on_call=0 WHERE id=2;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:14",
+    "session": "B",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "A:21",
+    "session": "A",
+    "sql": "COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:21",
+    "session": "A",
+    "output": []
+  },
+  {
+    "event": "submit",
+    "command_id": "B:15",
+    "session": "B",
+    "sql": "COMMIT;"
+  },
+  {
+    "event": "complete",
+    "command_id": "B:15",
+    "session": "B",
     "output": [
       "ERROR:  40001: could not serialize access due to read/write dependencies among transactions",
       "DETAIL:  Reason code: Canceled on identification as a pivot, during commit attempt.",
@@ -214,8 +466,15 @@
     ]
   },
   {
+    "event": "submit",
+    "command_id": "A:22",
     "session": "A",
-    "sql": "SELECT SUM(on_call) FROM doctors;",
+    "sql": "SELECT SUM(on_call) FROM doctors;"
+  },
+  {
+    "event": "complete",
+    "command_id": "A:22",
+    "session": "A",
     "output": [
       "1"
     ]
