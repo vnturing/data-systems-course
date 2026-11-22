@@ -1,0 +1,82 @@
+{
+  "redis_version": "7.4.12",
+  "topology": "three masters; internal network; no replicas or published ports",
+  "key_slots": {
+    "customer:42": 4672,
+    "orders:{42}:a": 8000,
+    "orders:{42}:b": 8000,
+    "orders:{99}:a": 6263,
+    "{}:tail": 13974,
+    "a{}{later}": 15484,
+    "{open": 7674,
+    "東京": 16157,
+    "🙂": 6396,
+    "key:0": 2592,
+    "key:1": 6657,
+    "key:2": 10850,
+    "key:3": 14915,
+    "key:4": 2724,
+    "key:5": 6789,
+    "key:6": 10982,
+    "key:7": 15047,
+    "key:8": 2856,
+    "key:9": 6921,
+    "key:10": 5536,
+    "key:11": 1409,
+    "key:12": 13794,
+    "key:13": 9667,
+    "key:14": 5412,
+    "key:15": 1285,
+    "key:16": 13670,
+    "key:17": 9543,
+    "key:18": 5288,
+    "key:19": 1161,
+    "key:20": 243,
+    "key:21": 4306,
+    "key:22": 8369,
+    "key:23": 12432,
+    "key:24": 119,
+    "key:25": 4182,
+    "key:26": 8245,
+    "key:27": 12308,
+    "key:28": 507,
+    "key:29": 4570,
+    "key:30": 13250,
+    "key:31": 9187,
+    "key:32": 4992,
+    "key:33": 929,
+    "key:34": 13126,
+    "key:35": 9063,
+    "key:36": 4868,
+    "key:37": 805,
+    "key:38": 13002,
+    "key:39": 8939
+  },
+  "moved_wrong_node": {
+    "kind": "MOVED",
+    "slot": 4672,
+    "target": "A"
+  },
+  "ask_during_move": {
+    "kind": "ASK",
+    "slot": 4672,
+    "target": "B"
+  },
+  "target_without_asking": {
+    "kind": "MOVED",
+    "slot": 4672,
+    "target": "A"
+  },
+  "asking_then_get": [
+    "OK",
+    "value-before-move"
+  ],
+  "moved_after_cutover": {
+    "kind": "MOVED",
+    "slot": 4672,
+    "target": "B"
+  },
+  "value_after_cutover": "value-before-move",
+  "crossslot_error": "CROSSSLOT Keys in request don't hash to the same slot",
+  "limits": "One quiescent key/slot move. No failover, concurrent migration writes, durability, WAN latency or full client implementation tested."
+}

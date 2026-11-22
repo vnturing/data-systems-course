@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local and global secondary indexes · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-6-checklist.html">Module 6 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 6 · Lesson 44</p><h1>Local and global secondary indexes</h1><p class="lede">A lookup key and a storage key often disagree. A secondary index decides where that disagreement becomes fan-out and where writes must maintain another copy.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Compare document-partitioned local indexes with term-partitioned global indexes, account for base fetches, and distinguish stale candidates from missing postings.</div>
+<h2>1. Local indexes follow the documents</h2>
+<p>Suppose documents are partitioned by ID but the query asks for status=paid. A local index on each document partition can answer which of <em>its</em> documents match. Without a partition-key predicate, the coordinator asks every relevant partition and combines the answers.</p>
+<p>Each individual lookup may be indexed and cheap, yet the distributed query still fans out. The real MySQL experiment from Lesson 42 makes the distinction visible inside one server: status-only access uses its index across all four partitions; adding the day key prunes to one. That is evidence about pruning and local access, not a distributed network benchmark.</p>
+<h2>2. A global index follows the lookup term</h2>
+<pre><code>base partitioning:   document ID → document owner
+index partitioning:  status term → postings / base-document references</code></pre>
+<p>A term-partitioned index can direct paid queries to the owner of paid postings. A write may now touch the base owner and a different index owner. Changes to an indexed term need both removal of the old posting and addition of the new one. A globally popular term can become a hot index key even when base documents are well distributed.</p>
+<p>“Global” does not mean the whole index lives on one machine. It describes an index whose partitioning can differ from the base documents. A real engine can further split posting lists or use composite keys. The lab deliberately gives each term one index partition so the trade is inspectable.</p>
+<div class="widget" id="sim-partition-index"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> query paid before the global index catches up. Revalidate candidates: document 42 is still missing. Switch to open and observe the stale extra candidate; revalidation can remove that one. Compare the local mode, where this model assumes index/data maintenance is atomic at each base partition.</p>
+<h2>3. Projection determines the second hop</h2>
+<p>If a query needs only IDs and fields projected into the index, its result can avoid base fetches. If it needs other fields or current base validation, the returned references may lead to many base partitions. A one-partition index lookup is therefore not necessarily a one-partition end-to-end query.</p>
+<p>The widget reports distinct base partitions, not one network call per document. Batching, pagination, projection width and candidate selectivity determine actual work. Enlarging the projection can save reads while increasing index bytes and write maintenance, the same trade as covering indexes in <a href="0023-secondary-covering-and-composite-indexes.html">Lesson 23</a>.</p>
+<h2>4. Revalidation fixes only one kind of staleness</h2>
+<p>The base has changed document 42 from open to paid. An old index can still return it for open: a <b>false positive</b> candidate. Fetching the current base record removes it. But an old paid index lacks the new posting: a <b>false negative</b>. Candidate validation cannot discover an ID that was never returned.</p>
+<p>A promise of current, complete results therefore needs more than filtering old candidates. Options include synchronizing index maintenance with the required write, waiting on an appropriate propagation barrier, or explicitly accepting lag. If base and index updates span systems, apply <a href="0002-what-if-it-dies-right-here.html">the crash-point drill</a>; a dual write is not automatically atomic.</p>
+<h2>5. Product terms have precise scopes</h2>
+<p>DynamoDB defines an LSI with the base table’s partition key and an alternate sort key. A GSI can use a different key schema and is updated asynchronously; its queries can return results not yet reflecting base changes.<sup class="c"><a href="#s1">[1]</a></sup> These API definitions are related to the placement trade, but the browser’s four physical owners and single-term partitions are not a DynamoDB emulator.</p>
+<p>Uniqueness also needs an ownership scope. Our MySQL RANGE table rejected UNIQUE(id) without event_day with <b>error 1503</b>; its documented partitioned-table unique-key rule requires the partitioning columns in each unique key.<sup class="c"><a href="#s2">[2]</a></sup> Changing it to UNIQUE(event_day,id) changes what is unique: the same ID can exist on another day. Do not replace global identity with per-partition uniqueness accidentally.</p>
+<p>For a distributed uniqueness claim, identify who can atomically arbitrate competing claims for the same logical value. Neither “we added a local index” nor “we named it global” supplies that protocol.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0044"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Documents use ID partitions, but the query specifies only status. What may a local secondary index require?",
+  "options": [
+   "No partition discovery for queries",
+   "A single globally ordered writer",
+   "Every document partition to participate",
+   "A complete scan without indexes"
+  ],
+  "answer": 2,
+  "why": "The local index helps inside each partition. Without a routable partition-key predicate, the query can still need all relevant partitions."
+ },
+ {
+  "q": "Why can one global-index partition still lead to multiple base partitions?",
+  "options": [
+   "Its references identify dispersed documents",
+   "All indexes contain full records",
+   "Every query changes its schema",
+   "Local indexes prohibit projected values"
+  ],
+  "answer": 0,
+  "why": "Lookup postings and base documents use different placement. Missing projected fields or validation can require a second fan-out."
+ },
+ {
+  "q": "Why does candidate revalidation not repair a missing paid posting?",
+  "options": [
+   "It always invents new candidates",
+   "It makes every index synchronous",
+   "It cannot inspect current records",
+   "The missing ID never returned"
+  ],
+  "answer": 3,
+  "why": "Revalidation can reject stale returned IDs. It cannot discover the unseen ID without another source of complete candidate information."
+ },
+ {
+  "q": "What does UNIQUE(event_day,id) guarantee instead of global UNIQUE(id)?",
+  "options": [
+   "Each ID is globally unique",
+   "Each day-ID pair is unique",
+   "Every status has one record",
+   "All partitions share one key"
+  ],
+  "answer": 1,
+  "why": "Including the partition column makes the pair unique; an ID can still occur under a different day. Review the application identity contract."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Trace one secondary query from its index lookup through projected fields or base fetches. State write atomicity, staleness, completeness and uniqueness scope. Include an indexed-field change between two terms.</p></details><p>Ask the course agent about any unclear result. Include the partition key, access pattern, ownership map and exact failure or workload.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: AWS DynamoDB, <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html">Local secondary indexes</a> and <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html">Global secondary indexes</a>. Start with key scope, projection and synchronization.</li><li id="s2">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations-partitioning-keys-unique-keys.html">Partitioning and unique keys</a>.</li><li>Own error/plan evidence: <a href="../experiments/partitioning/results/mysql-results.json">MySQL results</a>. The async document-42 trace is an original model, not a cloud-service measurement.</li></ol>
+<div class="pager"><a href="0043-skew-and-hot-keys.html">Lesson 43</a><a href="0045-rebalancing-and-consistent-hashing.html">Lesson 45: Rebalancing and consistent hashing</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-partitioning.js"></script><script src="../assets/ui-partitioning.js"></script></body></html>

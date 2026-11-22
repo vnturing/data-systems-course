@@ -1,0 +1,42 @@
+{
+  "mysql_version": "8.4.13",
+  "rows": 100000,
+  "partitions": 4,
+  "queries": {
+    "day_range": {
+      "partitions": [
+        "p2"
+      ],
+      "count": 25000,
+      "access_type": "range"
+    },
+    "id_lookup": {
+      "partitions": [
+        "p0",
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "count": 1,
+      "access_type": "ref"
+    },
+    "status_only": {
+      "partitions": [
+        "p0",
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "count": 10000,
+      "access_type": "ref"
+    },
+    "status_and_day": {
+      "partitions": [
+        "p2"
+      ],
+      "count": 2500,
+      "access_type": "range"
+    }
+  },
+  "unique_id_without_partition_key_error": 1503
+}

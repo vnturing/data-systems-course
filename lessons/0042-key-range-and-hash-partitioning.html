@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Key-range or hash partitioning? · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-6-checklist.html">Module 6 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 6 · Lesson 42</p><h1>Key-range or hash partitioning?</h1><p class="lede">Partitioning divides responsibility. The key determines both where work goes and which queries can avoid asking everyone.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Choose between ordered ranges and hashing for a declared workload, distinguish data balance from traffic balance, and read a real partition-pruning plan without claiming distributed scale-out.</div>
+<h2>1. A partition is not a replica</h2>
+<p>Partitioning divides the dataset into responsibilities. Replication makes copies of a responsibility. A system might have four partitions, each replicated three ways: that is not one twelve-member quorum. The quorum and authority questions from Module 5 apply to the relevant replica group for each key.</p>
+<p>Separate three decisions: <b>key → logical partition</b>, <b>partition → serving nodes</b>, and <b>which copy may serve this operation</b>. A hash can answer the first without answering current ownership or read freshness.</p>
+<h2>2. Ordered ranges preserve useful neighborhoods</h2>
+<pre><code>P0: keys [0,2500)       P1: [2500,5000)
+P2: keys [5000,7500)    P3: [7500,10000)</code></pre>
+<p>A query for keys 5000–7499 targets P2. An equality lookup uses one boundary interval. Neighboring keys remain together, which can help range scans and ordered pagination. The directory must know the actual boundaries; partitions need not have equal key widths or equal numbers of records.</p>
+<p>The cost of that locality appears when neighboring keys are busy together. If the newest timestamp is the leading key and all writes go to the advancing tail, only the tail partition receives them. Bigtable’s row-key design guidance explicitly discusses ordered keys and timestamp-related hotspots.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<div class="widget" id="sim-range-hash"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> compare layouts for the default interval. Next select the final-key activity burst. Then choose the single hot key. Equal record counts do not imply equal request load.</p>
+<h2>3. Hashing trades locality for dispersion</h2>
+<p>Hashing the full key can spread distinct adjacent keys across partitions. A router that knows an exact key can compute its partition. A range predicate on the original key generally does not describe one interval in hash space; this lab’s router queries all partitions for a non-point interval.</p>
+<p>A hash does not split repeated work on the same key: identical key bytes still select the same partition under the same map. Nor does a hash guarantee perfectly equal key counts in a finite sample. Unequal object sizes and traffic weights can dominate the result even when the hash distribution looks uniform.</p>
+<p>The lab uses a deterministic teaching hash and 10,000 equal-size records. It counts routed work and logical targets, not network latency. It does not emulate a particular database or enumerate every possible point in a hash-routed range predicate.</p>
+<h2>4. What real MySQL pruned</h2>
+<p>We created 100,000 rows across four MySQL 8.4.13 RANGE partitions: days below 25, 50, 75 and MAXVALUE. EXPLAIN FORMAT=JSON reported:</p>
+<div class="table-scroll"><table><thead><tr><th>Predicate</th><th>Partitions</th><th>Matching rows</th></tr></thead><tbody><tr><td>day ≥ 50 and day &lt; 75</td><td>p2</td><td>25,000</td></tr><tr><td>id = 12345, with by_id index</td><td>p0, p1, p2, p3</td><td>1</td></tr><tr><td>status = paid</td><td>p0, p1, p2, p3</td><td>10,000</td></tr><tr><td>paid plus the day interval</td><td>p2</td><td>2,500</td></tr></tbody></table></div>
+<p>These are <a href="../experiments/partitioning/results/mysql-results.json">executed counts and plan partition lists</a>. The manual defines pruning as excluding partitions that cannot match the predicate.<sup class="c"><a href="#s2">[2]</a></sup> The ID lookup uses an index, but the ID predicate does not identify a day partition. Index access and partition pruning are separate axes.</p>
+<p>This is <b>table partitioning inside one MySQL server</b>, not a measurement of a four-machine sharded database. We measured neither network fan-out nor distributed speedup. The experiment anchors pruning; the browser separately models placement across owners.</p>
+<h2>5. Choose the partition key with the queries</h2>
+<p>For events, (tenant, time) can keep a tenant’s interval local, while time alone can concentrate the newest writes and tenant alone can concentrate a large tenant. Hashing tenant can distribute tenants without dividing one exceptionally busy tenant. A composite key’s ordering and hashed portion must be explicit.</p>
+<p>List point lookups, range scans, joins and global reports before selecting the key. Mark which predicates identify a partition and which scatter. Then attach bytes and request weights to those partitions. The next lesson asks which overloaded unit can actually be divided without changing the operation’s meaning.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0042"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "What is the distinction between partitioning and replication?",
+  "options": [
+   "Dividing responsibility versus copying responsibility",
+   "Both always mean copying everything",
+   "Both always mean splitting tables",
+   "Replication eliminates all partition keys"
+  ],
+  "answer": 0,
+  "why": "A partition owns a subset; replicas copy that subset. Replica-group guarantees are evaluated for the relevant responsibility."
+ },
+ {
+  "q": "A hash spreads ten thousand distinct keys evenly. What happens to repeated requests for one exact key?",
+  "options": [
+   "Each request chooses another owner",
+   "They automatically become independent writes",
+   "They still select its partition",
+   "They bypass every routing table"
+  ],
+  "answer": 2,
+  "why": "The same key under the same mapping hashes to the same logical partition. Balanced key counts do not split a hot key."
+ },
+ {
+  "q": "MySQL uses by_id but searches all four day partitions. Which statement is accurate?",
+  "options": [
+   "Every indexed lookup prunes automatically",
+   "The query has no index",
+   "The result must contain duplicates",
+   "Index access differs from pruning"
+  ],
+  "answer": 3,
+  "why": "An index can find candidate rows within each partition while the predicate still fails to identify which partition holds them."
+ },
+ {
+  "q": "What did the MySQL pruning experiment measure?",
+  "options": [
+   "Four-server distributed throughput under failures",
+   "Single-server partition lists and results",
+   "Every network request during migration",
+   "Production tail latency under skew"
+  ],
+  "answer": 1,
+  "why": "The real experiment uses one partitioned MySQL table on one server. Distributed placement is a separate teaching model."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For one workload, mark which query predicates determine a partition. Compare an ordered and a hashed key, including the hottest tenant/time range, record sizes and scatter queries. Keep replica count separate from partition count.</p></details><p>Ask the course agent about any unclear result. Include the partition key, access pattern, ownership map and exact failure or workload.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Google Cloud Bigtable, <a href="https://docs.cloud.google.com/bigtable/docs/schema-design">Schema design best practices</a>. Start with row keys and hotspots.</li><li id="s2">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/partitioning-pruning.html">Partition Pruning</a>.</li><li>Own evidence: <a href="../experiments/partitioning/README.md">reproduction and limits</a>, including raw JSON plans. Placement examples and weighted workloads are original course models.</li></ol>
+<div class="pager"><a href="0041-lab-break-a-quorum.html">Lesson 41</a><a href="0043-skew-and-hot-keys.html">Lesson 43: Skew and hot keys: find the indivisible work</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-partitioning.js"></script><script src="../assets/ui-partitioning.js"></script></body></html>

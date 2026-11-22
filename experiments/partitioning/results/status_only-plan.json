@@ -1,0 +1,42 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost": "1011.52"
+    },
+    "table": {
+      "table_name": "events",
+      "partitions": [
+        "p0",
+        "p1",
+        "p2",
+        "p3"
+      ],
+      "access_type": "ref",
+      "possible_keys": [
+        "by_status"
+      ],
+      "key": "by_status",
+      "used_key_parts": [
+        "status"
+      ],
+      "key_length": "18",
+      "ref": [
+        "const"
+      ],
+      "rows_examined_per_scan": 10000,
+      "rows_produced_per_join": 10000,
+      "filtered": "100.00",
+      "using_index": true,
+      "cost_info": {
+        "read_cost": "11.52",
+        "eval_cost": "1000.00",
+        "prefix_cost": "1011.52",
+        "data_read_per_join": "312K"
+      },
+      "used_columns": [
+        "status"
+      ]
+    }
+  }
+}

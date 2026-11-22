@@ -1,0 +1,40 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost": "645.69"
+    },
+    "table": {
+      "table_name": "events",
+      "partitions": [
+        "p2"
+      ],
+      "access_type": "range",
+      "possible_keys": [
+        "PRIMARY",
+        "by_id",
+        "by_status"
+      ],
+      "key": "by_status",
+      "used_key_parts": [
+        "status",
+        "event_day"
+      ],
+      "key_length": "22",
+      "rows_examined_per_scan": 2567,
+      "rows_produced_per_join": 2567,
+      "filtered": "100.00",
+      "using_index_for_skip_scan": true,
+      "cost_info": {
+        "read_cost": "388.99",
+        "eval_cost": "256.70",
+        "prefix_cost": "645.69",
+        "data_read_per_join": "80K"
+      },
+      "used_columns": [
+        "event_day"
+      ],
+      "attached_condition": "((`m6`.`events`.`event_day` >= 50) and (`m6`.`events`.`event_day` < 75))"
+    }
+  }
+}

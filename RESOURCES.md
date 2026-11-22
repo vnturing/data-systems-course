@@ -211,6 +211,32 @@ Relevant primary sections below were opened/read. Exact local server observation
   Primary author-hosted report. State-merge laws, PN-counter and observed-remove semantics sections read. The course's set is a small state-based permanent-tombstone implementation, not every algorithm in the report. Initial HAL access was blocked; this author-hosted copy worked. Use for: Lesson 40.
 - Own evidence: `experiments/replication/results/mysql-results.json` and `binlog-events.txt`. `tools/test-replication.js` checks these observations and separately enumerates 21,343 fixed-membership set pairs, bounded vector order, merge laws and failure witnesses. No WAN latency, power failure, live election or production consistency certification was measured.
 
+### Added 2026-11-22 (Module 6, Lessons 42 to 46)
+
+Relevant primary pages were opened and checked. Committed server results independently anchor MySQL pruning and Redis routing; the other labs deliberately expose bounded placement/workload mechanisms.
+
+- [Manual: MySQL 8.4, Partition Pruning](https://dev.mysql.com/doc/refman/8.4/en/partitioning-pruning.html)
+  Primary. Predicate-based partition exclusion. Actual JSON plans and matching counts recorded for a four-partition table on one server; not a distributed scaling benchmark. Use for: Lesson 42.
+- [Docs: Google Cloud Bigtable, Schema design](https://docs.cloud.google.com/bigtable/docs/schema-design)
+  Primary. Ordered row keys, access patterns and timestamp/hotspot cautions. No Bigtable deployment was tested. Use for: Lesson 42.
+- [Docs: DynamoDB partition-key design](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html)
+  Primary. Activity and item-size implications of partition-key choice. The lesson uses an explicitly illustrative capacity rather than copying service limits. Use for: Lesson 43.
+- [Docs: DynamoDB write sharding](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html)
+  Primary. Random/calculated suffixes and query-all-buckets read trade. Workload model preserves physical bucket collisions and refuses to split an indivisible admission operation automatically. Use for: Lesson 43.
+- [Docs: DynamoDB Local Secondary Indexes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/LSI.html) and [Global Secondary Indexes](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GSI.html)
+  Primary. Key scope, projections and asynchronous GSI synchronization. The four-owner local/global model is not a simulation of DynamoDB internals. Use for: Lesson 44.
+- [Manual: MySQL 8.4, Partitioning keys and unique keys](https://dev.mysql.com/doc/refman/8.4/en/partitioning-limitations-partitioning-keys-unique-keys.html)
+  Primary. Partitioning-column requirement; independently reproduced error 1503 when adding UNIQUE(id). Pair uniqueness is not global ID uniqueness. Use for: Lesson 44.
+- [Paper: Consistent Hashing and Random Trees, Karger et al., STOC 1997](https://people.csail.mit.edu/karger/Papers/web.pdf)
+  Primary author-hosted paper. Limited remapping as membership changes. Initial Princeton copy was inaccessible; MIT author copy worked. Course ring/slot/modulo counts are original deterministic exercises, not the paper's measured system. Use for: Lesson 45.
+- [Paper: Dynamo, DeCandia et al., SOSP 2007](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf)
+  Primary. Virtual nodes and placement granularity; kept separate from replica failure-domain claims. Use for: Lesson 45.
+- [Specification: Redis Cluster](https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/)
+  Primary. 16,384 slots, CRC16-XMODEM/hash tags, slot ownership and MOVED vs ASK. Real three-master experiment uses CLUSTER SHARDS and one quiescent key migration; it does not test full resharding under concurrent writes. Use for: Lessons 45, 46.
+- [Docs: Google Cloud Bigtable, Overview](https://docs.cloud.google.com/bigtable/docs/overview)
+  Primary. Current frontend/tablet topology as one routing architecture example, distinguished from the historical paper and Redis direct-client maps. Use for: Lesson 46.
+- Own evidence: `experiments/partitioning/results/mysql-results.json`, raw `*-plan.json`, and `redis-results.json`. `tools/test-partitioning.js` checks these plus placement coverage, load conservation, stale-index witnesses, limited-remapping, cutover and bounded routing. No production latency, full migration protocol, failover or cloud throughput was measured.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)

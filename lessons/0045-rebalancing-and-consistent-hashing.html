@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Rebalancing and consistent hashing · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-6-checklist.html">Module 6 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 6 · Lesson 45</p><h1>Rebalancing and consistent hashing</h1><p class="lede">Changing a placement function is easy. Moving its bytes and write authority while requests continue is a separate protocol.</p><div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Compare remapping under modulo, fixed slots and stable ring tokens; explain virtual-node limits; audit snapshot, catch-up and ownership cutover separately.</div>
+<h2>1. Why modulo can move most keys</h2>
+<p>With hash(key) mod N, changing N changes the divisor for every key. Under a well-spread hash, growing from three to four owners changes roughly three quarters of assignments, not only the quarter needed by the new node. Many keys move between old nodes too.</p>
+<p>The following model uses 10,000 fixed keys. Its default results are <b>7,480</b> changed owners for modulo, <b>2,504</b> for the chosen fixed-slot policy, and <b>2,083</b> for its 64-token ring. These are computed placement counts, not disk/network measurements or universal ratios.</p>
+<div class="widget" id="sim-rebalance"><noscript>This interactive needs JavaScript.</noscript></div>
+<h2>2. Two ways to preserve most assignments</h2>
+<p><b>Fixed logical partitions:</b> hash into a stable slot space, then use a separate slot→node map. The model has 256 slots. On growth it assigns one chosen quarter to D, leaving other slot owners alone. Redis Cluster uses 16,384 logical hash slots and explicitly moves slot ownership between nodes.<sup class="c"><a href="#s1">[1]</a></sup> Our slot map is illustrative, not a Redis rebalance algorithm.</p>
+<p><b>Stable ring tokens:</b> map both keys and node tokens into an ordered hash space. A key belongs to the first token at or after its hash, wrapping around. Add D’s tokens while keeping old token positions: only intervals now owned by D change owner. Karger et al. introduced consistent hashing’s limited-remapping goal; Dynamo describes virtual-node use in a storage design.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<p><b>Try:</b> compare one token per node with 64 and 128. Additional tokens can distribute ownership more finely and support capacity weighting. They do not guarantee perfect finite-sample balance, equal object sizes or balanced traffic. An exceptionally hot key remains at one logical owner.</p>
+<p>Virtual tokens on the same physical server also do not create independent replica failure domains. Module 5’s distinct-durable-holder assumptions still concern actual copies on the relevant nodes.</p>
+<h2>3. Placement is not live migration</h2>
+<pre><code>identify data boundary → copy snapshot → capture/replay changes
++ validate catch-up → establish new write authority → change routing
++ reconcile retries / old readers → retire old copy when safe</code></pre>
+<p>A copied snapshot can already be stale when it finishes. A concurrent update may be missing; a concurrent delete may leave a record at the target that should no longer exist. The boundary between snapshot and change capture must avoid both gaps and incorrectly repeated effects.</p>
+<div class="widget" id="sim-partition-cutover"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> cut over with neither protection. The old snapshot retains the deleted record, and both owners can accept later writes. Enable complete ordered change capture, then exclusive write authority. Those controls stand for required mechanisms; the widget does not implement them.</p>
+<h2>4. The moving partition has two histories</h2>
+<p>Track a data-copy progress boundary and an ownership/configuration boundary separately. Knowing “B has the bytes” does not prove A stopped writing. Updating a directory does not prove every cached client has refreshed. The serving nodes need a protocol for stale requests, epochs or redirection as appropriate.</p>
+<p>The actual Redis experiment moves one quiescent key, checks ASK/ASKING during import, then installs the new slot owner. It establishes those routing behaviors and value preservation for that controlled sequence. It does not establish correctness under concurrent writes, controller crashes or arbitrary resharding workloads.</p>
+<p>Rollback is also a migration: after B accepts new writes, pointing clients back to A’s old snapshot can lose acknowledged work. A safe plan retains enough history, versioning and control to reconcile the chosen rollback path.</p>
+<h2>5. Budget bytes and operational headroom</h2>
+<p>A placement count assumes equal-size keys; real transfer cost depends on bytes, indexes, replicas, mutation rate and cache warming. A busy source may generate changes faster than the target catches up. Migration traffic can also overload the old owner before any capacity has been relieved.</p>
+<p>Choose movement rate, cutover criteria, abort behavior and observability before assuming the rebalance will finish. Smaller units can make moves easier but increase metadata and operational bookkeeping. Splitting a sequentially hot range can leave the newest tail hot again; use the workload diagnosis from Lesson 43.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0045"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Why can hash(key) mod N move keys between old nodes after growth?",
+  "options": [
+   "Only the new node hashes",
+   "Every record changes its value",
+   "The divisor changes every assignment",
+   "All old token positions persist"
+  ],
+  "answer": 2,
+  "why": "The placement function itself changes when N changes. A key can land on a different existing owner, not only the added owner."
+ },
+ {
+  "q": "What preserves old assignments in the ring example when D is added?",
+  "options": [
+   "Keeping existing token positions fixed",
+   "Rehashing all old node identities",
+   "Assigning every key to D",
+   "Moving one quarter by filename"
+  ],
+  "answer": 0,
+  "why": "The old ring remains in place and D adds tokens. Changed intervals go to D rather than being arbitrarily redistributed among old nodes."
+ },
+ {
+  "q": "A target has only the initial snapshot when the source later deletes a record. What can cutover expose?",
+  "options": [
+   "A guaranteed globally fresh snapshot",
+   "An automatically rejected old deletion",
+   "A new independent replica quorum",
+   "The record that should disappear"
+  ],
+  "answer": 3,
+  "why": "Without complete change capture/replay, the target can retain the deleted record and resurrect it on the new read path."
+ },
+ {
+  "q": "Why is changing routing back to the old snapshot not automatically a rollback?",
+  "options": [
+   "Every old snapshot is compressed",
+   "New acknowledged writes remain elsewhere",
+   "The hash loses its type",
+   "Every client forgets its schema"
+  ],
+  "answer": 1,
+  "why": "Once the new owner accepts writes, returning to a stale old copy can omit acknowledged history. Rollback needs its own data/authority protocol."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For one growth event, estimate bytes moved, mutation rate during copy, replica/index work and capacity headroom. Name the snapshot/change boundary, ownership fence, stale-client behavior and rollback history.</p></details><p>Ask the course agent about any unclear result. Include the partition key, access pattern, ownership map and exact failure or workload.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Redis, <a href="https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/">Cluster specification</a>, hash slots and live reconfiguration.</li><li id="s2">Primary: Karger et al., <a href="https://people.csail.mit.edu/karger/Papers/web.pdf">Consistent Hashing and Random Trees</a>, STOC 1997; DeCandia et al., <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf">Dynamo</a>, virtual nodes. Start with the limited-remapping idea.</li><li>Placement counts and migration failures are original deterministic exercises. <a href="../experiments/partitioning/README.md">Experiment notes</a> delimit the real quiescent Redis move.</li></ol>
+<div class="pager"><a href="0044-local-and-global-secondary-indexes.html">Lesson 44</a><a href="0046-request-routing-and-discovery.html">Lesson 46: Request routing and service discovery</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-partitioning.js"></script><script src="../assets/ui-partitioning.js"></script></body></html>

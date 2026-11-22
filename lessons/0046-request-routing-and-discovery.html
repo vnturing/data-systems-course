@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Request routing and service discovery · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-6-checklist.html">Module 6 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 6 · Lesson 46</p><h1>Request routing and service discovery</h1><p class="lede">A server address is not a partition map. After ownership moves, a correct client must discover where the key belongs without inventing a second write authority.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Separate membership discovery from key ownership, handle stale routing evidence, and explain Redis MOVED versus ASK using real protocol observations.</div>
+<h2>1. Two maps and a serving rule</h2>
+<pre><code>key → logical partition / slot → current node endpoint
++ which replica or authority may serve this operation?</code></pre>
+<p>DNS or service discovery can locate a live service endpoint. It does not necessarily say which key ranges or slots that node currently owns. Nor does an owner address alone establish that a chosen replica is sufficiently fresh for a session read.</p>
+<p>Common architectures place routing knowledge in a client library, a proxy/coordinator, or servers that forward or redirect stale requests. Each moves metadata caching, extra hops and availability dependencies to a different place. Google Cloud Bigtable’s documented frontend path is one concrete topology; Redis Cluster clients maintain slot maps and handle redirection.<sup class="c"><a href="#s1">[1]</a></sup> Neither architecture is universal.</p>
+<h2>2. Stale metadata is expected</h2>
+<p>Clients can keep an older ownership map during a split, rebalance, failover or reconnect. The system needs an explicit response: refresh, forward, redirect, reject, or safely wait. Allowing any old node to keep accepting writes is not a routing repair; it can create the split-brain histories from Lesson 34.</p>
+<p>Ownership epochs and node-side checks can make stale requests detectable under a particular protocol. This course does not implement election or fencing through its routing widget. It assumes the advertised authorities enforce the selected phase.</p>
+<div class="widget" id="sim-partition-routing"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> during movement, stop at the redirect, then follow it without ASKING. Finally handle it correctly. After cutover, observe why MOVED changes the cached owner while the temporary ASK exception did not.</p>
+<h2>3. Real Redis hash slots and hash tags</h2>
+<p>Redis Cluster hashes key bytes with CRC16-XMODEM into 16,384 slots, with a defined nonempty-brace hash-tag rule.<sup class="c"><a href="#s2">[2]</a></sup> The browser calculation matches 49 independently queried key examples, including non-ASCII text, empty braces and unmatched braces.</p>
+<p>In Redis 7.4.12, <code>customer:42</code> hashes to slot <b>4672</b>. Both <code>orders:{42}:a</code> and <code>orders:{42}:b</code> hash to <b>8000</b>; <code>orders:{99}:a</code> hashes to <b>6263</b>. The same tag can co-locate related keys for supported same-slot operations. It also deliberately concentrates those keys, so it is not a hot-tenant mitigation by itself.</p>
+<p>Our cross-slot MSET was rejected with CROSSSLOT. That is a real command constraint, not an assertion that every operation on multiple partitions in every database is impossible.</p>
+<h2>4. MOVED changes the route; ASK is one request</h2>
+<p>A query sent to a non-owner received MOVED with the slot and current destination. During controlled migration, after the selected key had moved from A to importing B, GET at A returned ASK. GET at B without ASKING returned MOVED back to A. Sending <b>ASKING then GET on the same connection</b> returned the value.</p>
+<p>After the slot-owner update, A returned MOVED to B, and GET at B succeeded without ASKING. These are <a href="../experiments/partitioning/results/redis-results.json">recorded observations</a> from a three-master internal cluster. The value after cutover remained value-before-move.</p>
+<p>The Redis specification distinguishes a one-request ASK exception from the ownership-map update prompted by MOVED.<sup class="c"><a href="#s2">[2]</a></sup> MOVED is not a promise that ownership will never change again. Clients still need bounded refresh/retry behavior and the protocol’s other responses; this toy is not a complete client.</p>
+<h2>5. Routing errors and uncertain execution are different</h2>
+<p>The experiment follows GET redirects. It does not prove exactly-once writes under timeouts. If a request might have executed before the connection failed, changing endpoints and retrying can duplicate an application effect. Keep operation identity, idempotency and retry budgets from <a href="0001-the-timeout-problem.html">Lesson 1</a>.</p>
+<p>Likewise, a global query during movement can need a consistent metadata/data boundary, merging and deduplication. Per-key redirection alone does not establish an atomic global scan. Directory availability, cache staleness, migration progress and request correctness should have separate metrics.</p>
+<h2>6. Finish the partitioning review</h2>
+<p>Use <a href="../reference/module-6-checklist.html">the Module 6 checklist</a> to connect the key, actual load, index placement, movement protocol and route ownership. Module 7 adds transactions: what multiple reads and writes may observe and commit together, whether they run on one partition or several.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0046"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "A service registry returns a live node address. What can remain unknown?",
+  "options": [
+   "Whether the hostname contains letters",
+   "Whether the process has memory",
+   "Whether the caller has bytes",
+   "Which partitions that node owns"
+  ],
+  "answer": 3,
+  "why": "Endpoint discovery and current ownership are separate maps. A live node need not be the eligible owner for a particular key or operation."
+ },
+ {
+  "q": "What does ASK require in the demonstrated Redis import case?",
+  "options": [
+   "Update every cached slot immediately",
+   "ASKING then query one connection",
+   "Delete the old owner directory",
+   "Retry without any command context"
+  ],
+  "answer": 1,
+  "why": "ASKING is a one-time connection flag for the redirected query at the importing node. The slot is still owned by the old node during that phase."
+ },
+ {
+  "q": "Two keys use the same nonempty Redis hash tag. What consequence should a design review include?",
+  "options": [
+   "Related keys intentionally share placement",
+   "All writes become globally atomic",
+   "Every tenant automatically avoids hotspots",
+   "All secondary indexes become synchronous"
+  ],
+  "answer": 0,
+  "why": "The tag co-locates keys in a slot for supported operations. It can also concentrate a hot tenant rather than split its load."
+ },
+ {
+  "q": "Why does successful GET redirection not prove exactly-once application writes under timeout?",
+  "options": [
+   "GET requests cannot use keys",
+   "Every redirect elects a leader",
+   "Uncertain write execution needs identity",
+   "All slot maps are permanent"
+  ],
+  "answer": 2,
+  "why": "A timed-out write may already have executed. Route refresh does not replace operation identity and appropriate retry semantics."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Trace an exact-key request during ownership change. Name the endpoint-discovery source, ownership metadata, stale-request response, owner-side enforcement and bounded retry rule. Include an uncertain write, not only a successful read.</p></details><p>Ask the course agent about any unclear result. Include the partition key, access pattern, ownership map and exact failure or workload.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Google Cloud Bigtable, <a href="https://docs.cloud.google.com/bigtable/docs/overview">Overview</a>, frontend/tablet architecture; Redis client routing is documented separately.</li><li id="s2">Primary: Redis, <a href="https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/">Cluster specification</a>, CRC16, hash tags, MOVED and ASK. Start with redirection semantics.</li><li>Own executable evidence: <a href="../experiments/partitioning/README.md">reproduction</a> and Redis fixture linked above. One quiescent key was moved; no failover, concurrent migration write, WAN latency or full client was tested.</li></ol>
+<div class="pager"><a href="0045-rebalancing-and-consistent-hashing.html">Lesson 45</a><a href="../reference/module-6-checklist.html">Module 6 checklist</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-partitioning.js"></script><script src="../assets/ui-partitioning.js"></script></body></html>

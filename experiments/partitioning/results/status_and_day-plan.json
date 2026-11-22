@@ -1,0 +1,40 @@
+{
+  "query_block": {
+    "select_id": 1,
+    "cost_info": {
+      "query_cost": "502.39"
+    },
+    "table": {
+      "table_name": "events",
+      "partitions": [
+        "p2"
+      ],
+      "access_type": "range",
+      "possible_keys": [
+        "PRIMARY",
+        "by_status"
+      ],
+      "key": "by_status",
+      "used_key_parts": [
+        "status",
+        "event_day"
+      ],
+      "key_length": "22",
+      "rows_examined_per_scan": 2500,
+      "rows_produced_per_join": 2500,
+      "filtered": "100.00",
+      "using_index": true,
+      "cost_info": {
+        "read_cost": "252.39",
+        "eval_cost": "250.00",
+        "prefix_cost": "502.39",
+        "data_read_per_join": "78K"
+      },
+      "used_columns": [
+        "event_day",
+        "status"
+      ],
+      "attached_condition": "((`m6`.`events`.`status` = 'paid') and (`m6`.`events`.`event_day` >= 50) and (`m6`.`events`.`event_day` < 75))"
+    }
+  }
+}

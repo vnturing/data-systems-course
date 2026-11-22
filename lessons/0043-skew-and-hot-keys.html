@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skew and hot keys: find the indivisible work · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-6-checklist.html">Module 6 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 6 · Lesson 43</p><h1>Skew and hot keys: find the indivisible work</h1><p class="lede">Adding nodes helps only when overloaded work can move or split. A billion quiet keys do not dilute one key receiving most of the requests.</p><div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Diagnose data, traffic and single-key skew separately; choose salting, caching or admission changes with the read and correctness costs attached.</div>
+<h2>1. Count work, not only keys</h2>
+<p>Three different imbalances can look like “one shard is full”: too many bytes, too many requests, or disproportionately expensive operations. A fourth problem is one indivisible item whose serialized work exceeds an owner’s capacity. Moving the item changes which node is overloaded; it does not divide the work.</p>
+<p>A key-count histogram is therefore insufficient. Record bytes, request rate, operation mix and service demand per partition and per heavy key. DynamoDB’s partition-key guidance likewise asks for uniform <em>activity</em> across keys and indexes, accounting for item sizes.<sup class="c"><a href="#s1">[1]</a></sup> The widget’s capacity numbers are illustrative, not DynamoDB limits.</p>
+<div class="widget" id="sim-hot-key"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> begin with independent appended items and one bucket. Increase physical nodes while keeping one bucket. Then use sixteen salt buckets. Switch to repeated reads and try the cache. Finally select a conditional update: the same salting control no longer changes the effective ownership unit.</p>
+<h2>2. Salting changes a logical access pattern</h2>
+<pre><code>one tenant bucket:   tenant:42
+salted append keys:  tenant:42:0, tenant:42:1, ... tenant:42:15
+item route:          stable item-derived suffix or explicitly recorded bucket</code></pre>
+<p>If independent appended items can be assigned across buckets, the hot tenant’s work can reach multiple owners. Logical buckets can still collide on the same physical node. More suffixes are not a theorem that every node receives identical load.</p>
+<p>The cost appears on reads. “All items for tenant 42 today” now requires the relevant bucket queries and a merge. Ordered pagination must account for progress on each stream; a single cursor for one bucket is not automatically a global continuation token. DynamoDB documents both random and calculated write sharding and the accompanying read fan-out.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<p>A random suffix needs a way to find an individual item later, or a fan-out lookup. A deterministic suffix can route an exact item when its inputs are known. Either strategy requires stable rules or migration metadata when bucket counts change; recomputing against today’s count can hide old items.</p>
+<h2>3. A cache helps a different operation</h2>
+<p>Repeated reads of the same value can be served by a cache or, under an appropriate contract, multiple read replicas. The model applies the declared cache hit rate only to the read case. It does not pretend the cache removes authoritative writes, or supply a freshness/invalidation guarantee.</p>
+<p>If the value changes often, cache misses may synchronize into a stampede. Versioning, invalidation, request coalescing and freshness requirements belong to that design. Refer back to the retry and admission lessons when a surge makes every miss expensive.</p>
+<h2>4. An authoritative condition cannot simply be salted away</h2>
+<p>Consider “decrement stock only if positive.” Splitting one counter into independent bucket counters changes which invariant each operation can inspect. As <a href="0040-crdts-and-merge.html">Lesson 40</a> showed, merging two correctly recorded local sales can still oversell one shared unit.</p>
+<p>The widget keeps a serialized conditional update at one owner. Alternatives include changing the business operation, allocating disjoint rights, coordinating admission, or accepting a weaker promise. Those are explicit semantic choices, not a hashing optimization.</p>
+<h2>5. A mitigation decision tree</h2>
+<ol><li><b>Many keys landed badly?</b> Rebalance or split the ownership ranges, then measure the new distribution.</li><li><b>One read-heavy value?</b> Evaluate caching or read replicas with a freshness contract.</li><li><b>Independent items share one logical key?</b> Consider stable sub-buckets and account for read merge cost.</li><li><b>One serialized invariant is overloaded?</b> Change its admission/ownership design or capacity; do not quietly change correctness.</li></ol>
+<p>The model keeps total background work fixed as nodes are added and uses equal request costs. It does not measure CPU, queues, I/O, adaptive capacity or production latency. In particular, salting a partition key is a logical layout choice; a cloud service controls its own physical placement and split behavior.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0043"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Why can equal record counts hide a severe hotspot?",
+  "options": [
+   "Records always have identical demand",
+   "Only requests without keys matter",
+   "Every hash function measures latency",
+   "Request costs and frequencies differ"
+  ],
+  "answer": 3,
+  "why": "Data balance and service-demand balance are separate. One item can dominate traffic or serialized work."
+ },
+ {
+  "q": "What new read obligation accompanies independent-item write salting?",
+  "options": [
+   "Query one unchanged bucket forever",
+   "Query relevant buckets and merge",
+   "Read every replica without context",
+   "Assume the suffix never matters"
+  ],
+  "answer": 1,
+  "why": "The broader logical key was split. Reads spanning it need the relevant bucket queries, merging and appropriate pagination state."
+ },
+ {
+  "q": "Why does adding nodes not split one serialized conditional update automatically?",
+  "options": [
+   "Its correctness unit remains indivisible",
+   "The hash cannot contain integers",
+   "All background work increases infinitely",
+   "Every read becomes strongly consistent"
+  ],
+  "answer": 0,
+  "why": "Moving ownership does not divide the operation’s admission invariant. Splitting it needs an explicit semantic protocol."
+ },
+ {
+  "q": "In the read-heavy case, what remains outside the declared cache-hit arithmetic?",
+  "options": [
+   "Whether repeated reads have keys",
+   "Whether the application has records",
+   "The freshness and invalidation contract",
+   "The existence of backend requests"
+  ],
+  "answer": 2,
+  "why": "A cache-hit rate describes reduced backend work. It does not establish which versions are acceptable or how updates invalidate cached state."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Choose a hot partition. Identify whether bytes, traffic, cost or a single serialized key dominates. Propose one mitigation and state the read fan-out, freshness or correctness cost it introduces.</p></details><p>Ask the course agent about any unclear result. Include the partition key, access pattern, ownership map and exact failure or workload.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: AWS DynamoDB, <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-design.html">Partition-key design</a>.</li><li id="s2">Primary: AWS DynamoDB, <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/bp-partition-key-sharding.html">Write sharding</a>. Start with random versus calculated suffixes and the read cost.</li><li>The equal-cost workload, collision counts and 6,000-unit capacity are original illustrative models, not measured service throughput.</li></ol>
+<div class="pager"><a href="0042-key-range-and-hash-partitioning.html">Lesson 42</a><a href="0044-local-and-global-secondary-indexes.html">Lesson 44: Local and global secondary indexes</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-partitioning.js"></script><script src="../assets/ui-partitioning.js"></script></body></html>

@@ -71,6 +71,12 @@
 - 0040 CRDTs (PN-counter and observed-remove set; bounded algebraic laws)
 - 0041 quorum failure lab (sloppy holders, partial failed writes, evidence-based repair/handoff)
 - Module 5 complete: lessons 33–41; reference/module-5-checklist.html, navigation, source record, experiments/replication/ and test-replication.js. Full model/quiz checks pass; 21,343 quorum set pairs are enumerated. Browser controls, saved quiz progress, themes, labels, print and no-JS fallbacks passed; all nine pages fit 320px and 390px viewports.
+- 0042 range/hash partitioning (routing locality vs weighted load; real MySQL pruning across four local partitions)
+- 0043 skew/hot keys (fixed total work, independent-item salt buckets, read caching, indivisible conditional updates)
+- 0044 local/global indexes (index and base fan-out; revalidation removes stale candidates but misses absent postings; real unique-key error 1503)
+- 0045 rebalancing/consistent hashing (modulo vs fixed slots vs stable tokens; independent copy/catch-up/authority drill)
+- 0046 routing/discovery (49 exact Redis slots; real CROSSSLOT, MOVED, ASK/ASKING and completed cutover)
+- Module 6 complete: lessons 42–46; reference/module-6-checklist.html, navigation, sources, experiments/partitioning/ and test-partitioning.js. Full checks and five-lesson browser QA passed at 320px/390px, including controls, quiz progress, themes, labels, print and no-JS fallbacks.
 
 ## Measurement lessons from Module 3 (apply to every future module)
 - A scrambled sequence (n*2654435761 mod 2^32) is NOT a random key source; it silently distorted the first B-tree numbers (76% fill / 223x became 66% / 141x). A model that shares the flaw will agree with a flawed experiment, so agreement is weak evidence.
@@ -82,7 +88,7 @@
 A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Module 3 also used real RocksDB through `pip install rocksdict` and read InnoDB page headers straight from the .ibd file. Background processes do not survive between tool calls, so start MySQL in the same command as the experiment.
 
 ## Next up
-1. Module 6 (partitioning), Lessons 42–46. Modules 4 and 5 were completed after Module 3 at the learner's request on 2026-11-22. Do not infer learner mastery from delivery; do not require another assessment before building the next outlined module.
+1. Module 7 (transactions), Lessons 47–55. Modules 4–6 were completed after Module 3 at the learner's request on 2026-11-22. Do not infer learner mastery from delivery; do not require another assessment before building the next outlined module.
 2. Lessons learned: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. MySQL's range boundary used the column after the range (92 entries, not 100); Redis restart settings differed from runtime settings; tiny compressed chunks grew with codec overhead. Preserve those observations.
 3. New experiment environment: macOS host, Linux/arm64 Docker containers, isolated Python 3.14 venv. The older sandbox notes above describe historical experiments, not requirements for the current machine. Temporary containers have no published ports and are removed after verification. Do not connect experiments to the learner's existing servers.
 
@@ -109,3 +115,12 @@ A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-s
 - Stale promotion loses a row from the current authority while B retains it; missing from authority is not destroyed on all disks. Old source and promoted C deliberately accepted divergent writes without fencing.
 - Quorum enumeration establishes set intersection only for fixed membership. Partial writes, substitute holders, version ordering and concurrent admission require additional arguments.
 - Causal comparison and state joins are bounded pure models. Actor allocation, durable metadata, eventual delivery and safe reclamation are assumptions. CRDT merge convergence does not enforce inventory admission.
+
+## Measurement lessons from Module 6
+- MySQL 8.4.13 partition pruning is a single-server observation, not distributed sharding. An indexed ID probe searched all four day partitions; the day range pruned to p2. Plans list partitions; matching-row counts do not measure physical reads.
+- UNIQUE(id) without the RANGE partition column failed with 1503. Adding the column to the unique key changes the identity guarantee to a pair.
+- Redis 7.4.12 cluster: 49 CLUSTER KEYSLOT examples independently match the browser's CRC16/tag implementation; special empty/unclosed tags and Unicode are included.
+- A quiescent one-key move verified ASK during import, MOVED at the target without ASKING, successful ASKING+GET on one connection, then MOVED to the new owner after cutover. No concurrent migration or failover was tested.
+- Rebalancing counts are pure equal-size-key model results, not bytes or network timings. Stable ring tokens/fixed slots changed ownership only to the added node; modulo also moved keys between old nodes.
+- Independent-item salting trades write concentration for logical read fan-out. Repeated reads and serialized admission have different mitigation contracts.
+- Local/global index placement is modeled independently of cloud internals. Revalidation cannot recover a posting absent from the candidate list. Capture/replay and fencing switches represent assumptions, not implemented migration protocols.

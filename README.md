@@ -18,7 +18,7 @@ All links are relative, so it works under `https://<user>.github.io/<repo>/`.
 ```
 sh tools/check-all.sh       # runs every model test and the quiz lint
 ```
-Individual checks: `node tools/test-sim.js`, `test-dualwrite.js`, `test-detector.js`, `test-kafka.js`, `test-retry.js`, `test-redundancy.js`, `test-latency.js`, `test-fanout.js`, `test-queue.js`, `test-slo.js`, `test-admission.js`, `test-planner.js`, `test-graph.js`, `test-layout.js`, `test-m2m.js`, `test-schema.js`, `test-log.js`, `test-wal.js`, `test-lsm.js`, `test-btree.js`, `test-ui-constants.js`, `test-storage-extra.js`, `test-encoding.js`, `test-replication.js`, and `python3 tools/check-quiz.py` (equal option word counts, varied answer positions).
+Individual checks: `node tools/test-sim.js`, `test-dualwrite.js`, `test-detector.js`, `test-kafka.js`, `test-retry.js`, `test-redundancy.js`, `test-latency.js`, `test-fanout.js`, `test-queue.js`, `test-slo.js`, `test-admission.js`, `test-planner.js`, `test-graph.js`, `test-layout.js`, `test-m2m.js`, `test-schema.js`, `test-log.js`, `test-wal.js`, `test-lsm.js`, `test-btree.js`, `test-ui-constants.js`, `test-storage-extra.js`, `test-encoding.js`, `test-replication.js`, `test-partitioning.js`, and `python3 tools/check-quiz.py` (equal option word counts, varied answer positions).
 
 ## Reproduce the MySQL measurements
 Module 2's "measured" numbers come from `experiments/mysql/` (see its README). `python3 experiments/mysql/verify_lesson_sql.py` executes every SQL block in the lessons against a local MySQL 8; it is not part of the CI check because it needs a server.
@@ -35,6 +35,10 @@ Module 4 is complete through Lesson 32. `experiments/encoding/` contains indepen
 ## Reproduce the replication checks
 
 Module 5 is complete through Lesson 41. `experiments/replication/` records real MySQL 8.4 receipt/apply, semi-sync, stale-promotion and divergent-writer observations. Its script uses three disposable containers on an internal network with no published ports and cleans them up. Browser models separately expose quorum assumptions, version vectors and CRDT merges. Docker is an optional reproduction dependency; website and CI checks use the committed observations and pure models.
+
+## Reproduce the partitioning checks
+
+Module 6 is complete through Lesson 46. `experiments/partitioning/` records real MySQL partition pruning/unique-key constraints and Redis Cluster hash slots, cross-slot rejection and MOVED/ASK migration behavior. Its scripts own disposable resources with no published ports and remove them afterward. The browser separately models placement, skew, secondary-index lag and cutover assumptions. Docker is optional for reproduction; website and CI use pure models and committed fixtures.
 
 ## Layout
 
