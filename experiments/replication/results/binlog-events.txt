@@ -1,0 +1,22 @@
+binlog.000004	4	Format_desc	1	127	Server ver: 8.4.13, Binlog ver: 4
+binlog.000004	127	Previous_gtids	1	198	b31d32fe-e63d-11f1-9992-ca67fe13926f:1-10
+binlog.000004	198	Gtid	1	277	SET @@SESSION.GTID_NEXT= 'b31d32fe-e63d-11f1-9992-ca67fe13926f:11'
+binlog.000004	277	Query	1	348	BEGIN
+binlog.000004	348	Table_map	1	405	table_id: 88 (m5.items)
+binlog.000004	405	Write_rows	1	464	table_id: 88 flags: STMT_END_F
+binlog.000004	464	Xid	1	495	COMMIT /* xid=48 */
+binlog.000004	495	Gtid	1	574	SET @@SESSION.GTID_NEXT= 'b31d32fe-e63d-11f1-9992-ca67fe13926f:12'
+binlog.000004	574	Query	1	645	BEGIN
+binlog.000004	645	Table_map	1	702	table_id: 88 (m5.items)
+binlog.000004	702	Write_rows	1	764	table_id: 88 flags: STMT_END_F
+binlog.000004	764	Xid	1	795	COMMIT /* xid=82 */
+binlog.000004	795	Gtid	1	874	SET @@SESSION.GTID_NEXT= 'b31d32fe-e63d-11f1-9992-ca67fe13926f:13'
+binlog.000004	874	Query	1	945	BEGIN
+binlog.000004	945	Table_map	1	1002	table_id: 88 (m5.items)
+binlog.000004	1002	Write_rows	1	1061	table_id: 88 flags: STMT_END_F
+binlog.000004	1061	Xid	1	1092	COMMIT /* xid=102 */
+binlog.000004	1092	Gtid	1	1171	SET @@SESSION.GTID_NEXT= 'b31d32fe-e63d-11f1-9992-ca67fe13926f:14'
+binlog.000004	1171	Query	1	1242	BEGIN
+binlog.000004	1242	Table_map	1	1299	table_id: 88 (m5.items)
+binlog.000004	1299	Write_rows	1	1356	table_id: 88 flags: STMT_END_F
+binlog.000004	1356	Xid	1	1387	COMMIT /* xid=110 */

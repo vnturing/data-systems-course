@@ -69,16 +69,16 @@
 
 <div class="module"><div class="part">Part II · Distributed data</div><h3>Module 5 · Replication</h3>
 <ol start="33">
-<li class="status-planned">Single-leader replication; synchronous, asynchronous, semi-synchronous</li>
-<li class="status-planned">Failover and its hazards: split brain, lost writes, bad timeouts</li>
-<li class="status-planned">What actually travels in the replication log</li>
-<li class="status-planned">Replication lag anomalies: read-your-writes, monotonic reads, consistent prefix <span class="why">&mdash; find them in your product</span></li>
-<li class="status-planned">Multi-leader: when it earns its complexity; conflict handling</li>
-<li class="status-planned">Leaderless replication: quorums, read repair, hinted handoff, sloppy quorums</li>
-<li class="status-planned">Concurrency without a clock: version vectors and siblings</li>
-<li class="status-planned">CRDTs and the idea of merge-by-construction</li>
-<li class="status-planned">Lab: break a quorum on purpose</li>
-</ol></div>
+<li data-lesson-id="0033"><a href="lessons/0033-single-leader-replication.html">Single-leader replication; synchronous, asynchronous, semi-synchronous</a> <span class="status-built">built</span> <span class="why">&mdash; local durability, remote receipt and apply; real MySQL semi-sync</span></li>
+<li data-lesson-id="0034"><a href="lessons/0034-failover-and-fencing.html">Failover and its hazards: split brain, lost writes, bad timeouts</a> <span class="status-built">built</span> <span class="why">&mdash; select history and fence the old writer</span></li>
+<li data-lesson-id="0035"><a href="lessons/0035-replication-log-formats.html">What actually travels in the replication log</a> <span class="status-built">built</span> <span class="why">&mdash; statement, row and physical families; actual binlog events</span></li>
+<li data-lesson-id="0036"><a href="lessons/0036-replication-lag-anomalies.html">Replication lag anomalies: read-your-writes, monotonic reads, consistent prefix</a> <span class="status-built">built</span> <span class="why">&mdash; version barriers and dependent histories</span></li>
+<li data-lesson-id="0037"><a href="lessons/0037-multi-leader-and-conflicts.html">Multi-leader: when it earns its complexity; conflict handling</a> <span class="status-built">built</span> <span class="why">&mdash; clock winners, siblings and admission invariants</span></li>
+<li data-lesson-id="0038"><a href="lessons/0038-leaderless-replication-and-quorums.html">Leaderless replication: quorums, read repair, hinted handoff, sloppy quorums</a> <span class="status-built">built</span> <span class="why">&mdash; enumerate actual intersections and their assumptions</span></li>
+<li data-lesson-id="0039"><a href="lessons/0039-version-vectors-and-siblings.html">Concurrency without a clock: version vectors and siblings</a> <span class="status-built">built</span> <span class="why">&mdash; causal context, reconciliation and deletion evidence</span></li>
+<li data-lesson-id="0040"><a href="lessons/0040-crdts-and-merge.html">CRDTs and the idea of merge-by-construction</a> <span class="status-built">built</span> <span class="why">&mdash; PN-counter, observed-remove set and merge laws</span></li>
+<li data-lesson-id="0041"><a href="lessons/0041-lab-break-a-quorum.html">Lab: break a quorum on purpose</a> <span class="status-built">built</span> <span class="why">&mdash; sloppy holders, partial writes and evidence-based repair</span></li>
+</ol><p style="font-family:var(--sans);font-size:.82rem;margin:.6rem 0 0"><a href="reference/module-5-checklist.html">Module 5 replication-review checklist</a> &middot; <a href="experiments/replication/README.md">Replication experiments</a></p></div>
 
 <div class="module"><div class="part">Part II</div><h3>Module 6 · Partitioning</h3>
 <ol start="42">

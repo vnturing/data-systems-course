@@ -1,0 +1,28 @@
+{
+  "mysql_version": "8.4.13",
+  "topology": "one source, two replicas; private internal Docker network; no published ports",
+  "durability": {
+    "sync_binlog": 1,
+    "innodb_flush_log_at_trx_commit": 1
+  },
+  "lag": {
+    "before_apply_count": 0,
+    "wait_while_stopped": 1,
+    "after_apply_count": 1,
+    "wait_after_apply": 0,
+    "received_gtids": "b31d32fe-e63d-11f1-9992-ca67fe13926f:1-11",
+    "source_gtids": "b31d32fe-e63d-11f1-9992-ca67fe13926f:1-11"
+  },
+  "semisync": {
+    "acknowledged_transactions_delta": 1,
+    "replica_visible_rows_at_ack": 0,
+    "source_status": "ON"
+  },
+  "stale_promotion_and_split_brain": {
+    "source_rows": "1\n2\n3\n4\n5",
+    "promoted_c_rows": "1\n2\n3\n6",
+    "acknowledged_row_on_promoted_c": 0,
+    "same_row_on_b": 1
+  },
+  "limits": "Controlled stop/start and promotion, not real power loss, automated election, fencing, WAN latency or a failover product benchmark"
+}

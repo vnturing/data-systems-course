@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lab: break a quorum on purpose · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 41</p><h1>Lab: break a quorum on purpose</h1><p class="lede">Keep the headline counts fixed at N=3, W=2, R=2. Change one hidden assumption and see which guarantee actually survives.</p>
+<div class="meta"><span>~40 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Construct concrete quorum counterexamples, distinguish a stale read from an unavailable read, and repair the failed premise instead of treating the formula as a proof.</div>
+<h2>1. Write the claim before running the trace</h2>
+<p>The home set is {A,B,C}. Initial value is v0. A new value v1 is ordered after v0 for this one key; there are no concurrent writers in the lab. Acknowledgement requires two holders, and a read collects two responses. We deliberately make version choice easy so that membership and partial effects remain visible.</p>
+<p>First choose the completed home write {A,B}. Predict the result from read responders {B,C}. Write down the actual overlapping member, not just R+W=4. Then compare that baseline with the two failure traces.</p>
+<div class="widget" id="sim-break-quorum"><noscript>This interactive needs JavaScript.</noscript></div>
+<h2>2. Counterexample: acknowledged sloppy write</h2>
+<p>Choose the sloppy case. A and fallback D hold v1; the write succeeds under this scenario’s two-holder policy. B and C still hold v0. Reading {B,C} returns v0. The counts are unchanged, but <b>{A,D} ∩ {B,C} is empty</b>.</p>
+<p>Enable read repair first. Both responders agree on v0, so repair has no evidence of D’s unseen v1. It cannot invent the missing version. Next recover B and deliver D’s saved hint before the read. B now provides v1. Optional read repair can carry that evidence onward to C.</p>
+<p>The Dynamo paper describes sloppy membership and hinted handoff as availability mechanisms.<sup class="c"><a href="#s1">[1]</a></sup> Our exact holder sets are a course counterexample, not a claim that every Dynamo read follows this injected route. A hint also needs a surviving holder, valid destination and eventual delivery; its existence is not instantaneous convergence.</p>
+<h2>3. Counterexample: a failed write becomes visible</h2>
+<p>Choose the partial-write case with repair off. Only A stores v1, so the write does not reach W=2 and receives no success acknowledgement. A first read from {A,B} observes v1. A later read from {B,C} returns v0. Both reads have two responders.</p>
+<p>The completed-write intersection argument does not cover a value stored on only one node. “Write failed” did not erase its effect. A retry also needs an identity and suitable semantics; otherwise a caller may repeat an already partly executed operation.</p>
+<p>Enable blocking read repair. The first read updates B to v1 before returning; the second read now intersects that repaired set. This illustrates the specific monotonic-quorum-read scenario explained by Cassandra’s documentation.<sup class="c"><a href="#s2">[2]</a></sup> It is not a general proof of every Cassandra consistency property or a substitute for its configured protocol.</p>
+<h2>4. Prefer an honest unavailable answer to an invented guarantee</h2>
+<p>One response to unavailable home replicas is to refuse a write that cannot reach the required fixed set. That gives up some availability but preserves the premise used by the intersection argument. Another design accepts substitutes and promises weaker immediate reads with durable deferred handoff. Neither should be advertised using the other’s proof.</p>
+<p>Similarly, a read barrier in Lesson 36 can wait or fail when no eligible replica exists. Returning an arbitrary stale result is a different contract. State which one the product chooses and what the user sees.</p>
+<h2>5. The module’s review procedure</h2>
+<ol><li><b>Authority:</b> who may accept writes, and how are former writers fenced?</li><li><b>Acknowledgement:</b> which durable holders or apply stages precede success, including timeout fallback?</li><li><b>History:</b> how are bootstrap, received/applied positions and failover candidates checked?</li><li><b>Reads:</b> which freshness, session or dependency guarantee is needed?</li><li><b>Concurrency:</b> which versions can coexist, and which merge preserves the domain contract?</li><li><b>Repair:</b> how do unseen, partial, deleted and long-cold records eventually reconcile?</li></ol>
+<p>Use the real MySQL fixtures to anchor receipt/apply, stale promotion and dual-writer claims. Use exhaustive set enumeration and merge-law tests for the bounded mathematical models. Neither substitutes for fault tests against the production product and configuration.</p>
+<p>Finish with <a href="../reference/module-5-checklist.html">the replication checklist</a>. Module 6 adds partitioning: the membership universe and hot-key distribution that this module mostly held fixed.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0041"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Sloppy write holders are A,D; read responders are B,C. What is the actual intersection?",
+  "options": [
+   "Only the original leader A",
+   "Every one of three homes",
+   "Only the temporary fallback D",
+   "There is no common member"
+  ],
+  "answer": 3,
+  "why": "The disjoint actual sets violate the fixed-home premise even though the headline acknowledgement counts satisfy R+W>N."
+ },
+ {
+  "q": "Why does read repair not fix the stale sloppy read before handoff?",
+  "options": [
+   "Repair always deletes fresh data",
+   "Both responders lack newer evidence",
+   "The write had no copies",
+   "The key has no value"
+  ],
+  "answer": 1,
+  "why": "B and C both know only v0. Read repair cannot discover v1 on an uncontacted holder without another mechanism bringing that evidence."
+ },
+ {
+  "q": "A write fails after reaching only A. The next read observes v1. What should the client infer?",
+  "options": [
+   "Failure did not erase effects",
+   "Every home replica stored v1",
+   "The write definitely never happened",
+   "Every later read stays current"
+  ],
+  "answer": 0,
+  "why": "Failed acknowledgement is not universal rollback. Partial effects may become visible and require safe retry/reconciliation handling."
+ },
+ {
+  "q": "What makes the repaired partial-write trace avoid its second-read regression?",
+  "options": [
+   "Increasing N without changing responders",
+   "Choosing the largest clock globally",
+   "B received v1 before return",
+   "Deleting the original transaction context"
+  ],
+  "answer": 2,
+  "why": "Blocking first-read repair places v1 on B, which participates in the second read. The conclusion is about this trace and its assumptions."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Take one replication claim from a design review. Write a minimal failing trace that changes one premise: stale promotion, missing dependency, sloppy membership, partial write or concurrent update. State the repair and its availability cost.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: DeCandia et al., <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf">Dynamo</a>, sloppy membership and hinted handoff.</li><li id="s2">Primary: Apache Cassandra documentation, <a href="https://cassandra.apache.org/doc/latest/cassandra/managing/operating/read_repair.html">Read repair</a>. Start with the partial-write/monotonic-read explanation.</li><li>Exact sets, injected deliveries and assertions are original exercises. <a href="../experiments/replication/README.md">Reproduction and limits</a> distinguish real MySQL tests from pure models.</li></ol>
+<div class="pager"><a href="0040-crdts-and-merge.html">Lesson 40</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

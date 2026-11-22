@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Version vectors: concurrency without a clock · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 39</p><h1>Version vectors: concurrency without a clock</h1><p class="lede">Two versions can be concurrent even when one was written later by a wall clock. Preserve what each writer had observed.</p>
+<div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Compare version vectors componentwise, retain concurrent siblings, and explain why reconciliation and deletion need causal context.</div>
+<h2>1. A scalar version is not enough for a fork</h2>
+<pre><code>base:                  {A:1}
+A updates that base:    {A:2}       value Alice
+B updates that base:    {A:1,B:1}   value Alicia</code></pre>
+<p>A’s branch knows more A updates; B’s branch knows a B update absent from A. Neither includes all the other’s history. Picking the larger sum would discard this distinction: both sums are 2. Sorting actor names would create an arbitrary order, not a causal fact.</p>
+<p>Dynamo associates per-object version context with reads and later writes so that a subsequent update can say which versions it observed.<sup class="c"><a href="#s1">[1]</a></sup> Our version vectors use small stable actor IDs to expose that mechanism; they are not a byte-for-byte implementation of Dynamo’s metadata.</p>
+<h2>2. Compare every component</h2>
+<p>Treat a missing component as zero. Vector x is strictly before y when every component of x is ≤ y and at least one is smaller. If each vector has a component larger than the other’s, they are incomparable: concurrent. Equal vectors are equal context, not two independent branches.</p>
+<div class="widget" id="sim-version-vectors"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> begin with both clients updating the old base. Then let B observe A before updating: B’s context becomes {A:2,B:1}, which dominates A’s {A:2}. Finally choose the resolver case. It joins both branches componentwise and advances a fresh resolver component C.</p>
+<h2>3. Merge context separately from values</h2>
+<pre><code>join({A:2}, {A:1,B:1}) = {A:2,B:1}
+resolver writes after seeing both = {A:2,B:1,C:1}</code></pre>
+<p>The resolver’s context dominates both inputs. That establishes that it is a subsequent version incorporating observation of both branches. It does not prove its chosen value is the correct business resolution. The example’s confirmed name is an explicit application choice, not a mathematical merge of spellings.</p>
+<p>A version store can keep the undominated versions as <b>siblings</b>. Ancestors need not remain as active alternatives when a descendant supersedes them. If a client reads only one sibling and writes with only that context, it has not resolved the sibling it never observed. Carrying context is part of the API contract.</p>
+<h2>4. Metadata has operational assumptions</h2>
+<p>Actor identity and counters must be managed correctly. Reusing an actor ID with a reset counter can make a new update look old or equal. Our arithmetic helper advances a supplied context; a production allocator must also prevent reusing an already-issued actor/version dot. Unbounded actor creation grows metadata; truncating context without a justified protocol can change concurrency detection.</p>
+<p>Version vectors for object histories and vector clocks for general process events are related techniques, but their component identities and update rules depend on the system. Do not copy a few lines of componentwise comparison and assume the surrounding context-generation protocol is solved.</p>
+<h2>5. A delete is a version too</h2>
+<div class="widget" id="sim-replica-deletion"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>The deletion at {A:2} supersedes an old value at {A:1}. If the deletion evidence disappears before an old replica rejoins, an ordinary “merge whatever exists” can resurrect the value. Tombstones or equivalent causal metadata must remain until the system can establish that obsolete state cannot validly return.</p>
+<p>The widget toggles an intentionally unsafe deletion of <em>all</em> evidence. It does not assert that every real garbage collector has this flaw, nor prescribe a fixed waiting period. Membership, repair, backup restore and permanently retired actors all affect safe reclamation.</p>
+<p>The next lesson uses similar per-actor metadata for a different purpose: constructing merges whose algebra tolerates reordered and duplicate state delivery.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0039"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Compare {A:2} with {A:1,B:1}. What relationship holds?",
+  "options": [
+   "The first strictly dominates both",
+   "The second strictly dominates both",
+   "Both represent identical causal knowledge",
+   "Neither dominates the other vector"
+  ],
+  "answer": 3,
+  "why": "Each has information missing from the other: A:2 versus B:1. They are concurrent, regardless of scalar sums or wall-clock ordering."
+ },
+ {
+  "q": "A resolver observed both sibling vectors. What context should its next version incorporate?",
+  "options": [
+   "Only the smallest visible component",
+   "Their join plus its advance",
+   "Only the largest wall-clock stamp",
+   "A reset vector without actors"
+  ],
+  "answer": 1,
+  "why": "Joining context preserves observation of both branches; advancing the resolver’s component identifies the new version."
+ },
+ {
+  "q": "What does a dominating context prove about the chosen resolved value?",
+  "options": [
+   "Observation rather than business correctness",
+   "Automatic correctness for every application",
+   "That all spellings mean identically",
+   "That no other versions existed"
+  ],
+  "answer": 0,
+  "why": "Causal metadata records observation. The application still chooses a value consistent with its domain semantics."
+ },
+ {
+  "q": "Why can dropping deletion metadata too early resurrect a record?",
+  "options": [
+   "Every deletion changes the schema",
+   "Every replica immediately loses storage",
+   "Old state can appear unsuperseded",
+   "All vector comparisons use timestamps"
+  ],
+  "answer": 2,
+  "why": "Without retained deletion evidence or an equivalent protocol, a returning old copy may be treated as surviving data."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Write two concurrent updates and their read contexts for a real object. Show the comparison, the siblings retained and the context required to resolve both. Include actor restart and deletion reclamation in the review.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: DeCandia et al., <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf">Dynamo</a>, data versioning and reconciliation. Start with the context passed from reads into writes.</li><li>Comparison, resolver and deletion traces are original executable examples. Metadata reclamation and actor allocation are declared assumptions, not implemented protocols.</li></ol>
+<div class="pager"><a href="0038-leaderless-replication-and-quorums.html">Lesson 38</a><a href="0040-crdts-and-merge.html">Lesson 40: CRDTs: design the merge before the outage</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

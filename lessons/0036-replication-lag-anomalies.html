@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Replication lag: name the broken guarantee · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 36</p><h1>Replication lag: name the broken guarantee</h1><p class="lede">“Eventual consistency” does not name the user-visible problem. Trace what a particular session saw, then ask which guarantee it needed.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Distinguish read-your-writes, monotonic reads and an ordered prefix; design a read route or barrier that protects the required history.</div>
+<h2>1. Three observations that look like “stale”</h2>
+<ul><li><b>Read your writes:</b> you update your avatar to v2, then read v1 from a lagging follower.</li><li><b>Monotonic reads:</b> you read v2, then a later read returns v1, even though you did not write either value.</li><li><b>Ordered prefix:</b> you observe an order confirmation without the earlier order creation it depends on.</li></ul>
+<p>The first two are session guarantees developed in the Bayou work: restrict reads to replicas containing the session’s required writes or already observed history.<sup class="c"><a href="#s1">[1]</a></sup> They do not require every other client to see the same latest state.</p>
+<p>The prefix example concerns visibility of an ordered/dependent history. A follower applying one sequential committed log prefix cannot expose entry 2 while omitting entry 1 from that same prefix. With separate streams, shards or read paths, “every stream is ordered” does not establish the combined dependency. Causal consistency explicitly addresses visibility of causal predecessors.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<div class="widget" id="sim-replication-lag"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> reproduce each anomaly. Staying at A repairs the first two toy traces, but it is not a general causal protocol. For the cross-stream example, require the missing dependency: the correct result may be a wait or an unavailable response rather than a fabricated complete view.</p>
+<h2>2. A version barrier is evidence; a delay is a guess</h2>
+<p>A write response can carry a position or transaction token. A later read is eligible only on a server that has applied the required history. The service can wait, route to another eligible node or return a bounded failure. Sleeping for 500 ms cannot prove replication completed during an outage.</p>
+<pre><code>write at source → capture required committed transaction context
+read candidate → wait for that context to be applied
+success → read using a fresh suitable snapshot
+wait timeout → route elsewhere or return an explicit failure</code></pre>
+<p>In the real MySQL drill, B had received the source’s GTID set but its SQL applier was paused. The row count was <b>0</b> and WAIT_FOR_EXECUTED_GTID_SET timed out with <b>1</b>. After apply resumed, the wait returned <b>0</b> and the row count became <b>1</b>. Those are function return codes, not seconds of lag.<sup class="c"><a href="#s3">[3]</a></sup></p>
+<p>The experiment obtains the whole source executed set as a simple barrier. A production application needs a trustworthy token associated with its own committed operation; the whole global set can include unrelated work and overconstrain reads. A successful wait also does not refresh a snapshot that was already opened before the change. Transaction visibility and replication eligibility both matter.</p>
+<h2>3. Sticky sessions have a failure case</h2>
+<p>Keeping a session on one sufficiently fresh replica can prevent it moving backward in the simple history. But a restarted session, another device or failover may choose another node. If the service silently routes to any available stale copy, its session guarantee ends at exactly the failure users notice most.</p>
+<p>Track the required history across the scope of the promised session, and name how it is propagated. A per-device cookie does not automatically create a cross-device guarantee. A new primary selected without all acknowledged writes can also break an assumption that “read from the leader” alone fixes everything.</p>
+<h2>4. Vendor contracts are specific</h2>
+<p>DynamoDB documents eventually consistent and strongly consistent reads for tables and local secondary indexes, while global secondary indexes and streams have different read options.<sup class="c"><a href="#s4">[4]</a></sup> A strong table read does not turn a GSI query into the same operation. This modern DynamoDB contract is not the 2007 Dynamo paper’s interface.</p>
+<p>For any product, ask which resource, region, consistency setting and session scope the guarantee covers. Do not equate a label such as “consistent prefix” with every cross-partition causal guarantee. The lab’s examples specify their histories directly rather than claiming to emulate a vendor consistency mode.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0036"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "You read v2, then a later read returns v1 without any intervening client write. Which guarantee is violated?",
+  "options": [
+   "Only atomic multi-row transaction commit",
+   "Monotonic reads within that session",
+   "Only exactly-once message delivery semantics",
+   "Only uniqueness of primary identifiers"
+  ],
+  "answer": 1,
+  "why": "Monotonic reads prevent a session from moving backward in the history it has already observed."
+ },
+ {
+  "q": "Why does sleeping briefly after a write not establish read-your-writes?",
+  "options": [
+   "Every clock measures identical lag",
+   "The leader always ignores sleeps",
+   "Sleeping changes the transaction identity",
+   "Time alone cannot establish application"
+  ],
+  "answer": 3,
+  "why": "A timer does not establish that the target replica applied the required transaction. Use evidence or a clearly weaker promise."
+ },
+ {
+  "q": "The replica GTID wait returned 0 after apply resumed. What does that return code mean?",
+  "options": [
+   "The required set finished executing",
+   "The replica has zero transactions",
+   "The source elected another leader",
+   "The read requires zero snapshots"
+  ],
+  "answer": 0,
+  "why": "For this MySQL function, 0 means success and 1 timeout. A suitable read snapshot is still required."
+ },
+ {
+  "q": "Two streams each preserve their own order. What remains unproved for a combined read?",
+  "options": [
+   "Whether either stream contains records",
+   "Whether the source uses SQL",
+   "Whether cross-stream dependencies are visible",
+   "Whether each record has bytes"
+  ],
+  "answer": 2,
+  "why": "Per-stream order alone does not establish a causally complete combined view across streams or read paths."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Pick one product flow: profile update, feed refresh or order confirmation. State the exact session/dependency guarantee, the required token, the eligible read targets and what happens when none is available.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Terry et al., <a href="https://www.cs.cornell.edu/courses/cs734/2000FA/cached%20papers/SessionGuaranteesPDIS_1.html">Session Guarantees for Weakly Consistent Replicated Data</a>, PDIS 1994. Start with read-your-writes and monotonic reads.</li><li id="s2">Primary model reference: Jepsen, <a href="https://jepsen.io/consistency/models/causal">Causal Consistency</a>.</li><li id="s3">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/gtid-functions.html">GTID functions</a>. Own wait/visibility observations are in the replication fixtures.</li><li id="s4">Primary: AWS, <a href="https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html">DynamoDB read consistency</a>. Product APIs are not simulated.</li></ol>
+<div class="pager"><a href="0035-replication-log-formats.html">Lesson 35</a><a href="0037-multi-leader-and-conflicts.html">Lesson 37: Multi-leader replication and conflict policy</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

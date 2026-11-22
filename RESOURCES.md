@@ -179,6 +179,38 @@ Primary pages below were opened and their relevant format/evolution rules checke
   Primary. Registry/SerDe integrations and compatibility modes including BACKWARD_ALL. No assumption of equivalent framing or policy scope across vendors. Use for: Lessons 31, 32.
 - Own experiments: `experiments/encoding/verify.py` and `results.json`: 70 wire examples, 54 Avro pair outcomes, four Protobuf intermediary paths, tag reuse, ProtoJSON rejection and text parser cases. Schema rules, byte counts and application semantic assertions are distinguished in each lesson.
 
+### Added 2026-11-22 (Module 5, Lessons 33 to 41)
+
+Relevant primary sections below were opened/read. Exact local server observations are independently recorded under `experiments/replication/`; the remaining labs are explicitly bounded mechanism models.
+
+- [Manual: MySQL 8.4, Replication Threads](https://dev.mysql.com/doc/refman/8.4/en/replication-threads.html)
+  Primary. Receiver/applier distinction. Independently tested with a stopped SQL applier and a running receiver. Use for: Lesson 33.
+- [Manual: MySQL 8.4, Semisynchronous Replication](https://dev.mysql.com/doc/refman/8.4/en/replication-semisync.html), [installation](https://dev.mysql.com/doc/refman/8.4/en/replication-semisync-installation.html), [monitoring](https://dev.mysql.com/doc/refman/8.4/en/replication-semisync-monitoring.html)
+  Primary. Flushed relay receipt, timeout fallback and runtime counters. The experiment verifies a successful semi-sync acknowledgement while apply is paused; it does not measure fallback or power-loss durability. Use for: Lesson 33.
+- [Manual: MySQL 8.4, Switching Sources During Failover](https://dev.mysql.com/doc/refman/8.4/en/replication-solutions-switch.html)
+  Primary. Source switching and history coordinates. Experiment injects stale promotion and unfenced writes; no election or fencing product tested. Use for: Lesson 34.
+- [Manual: MySQL 8.4, Replication Formats](https://dev.mysql.com/doc/refman/8.4/en/replication-formats.html) and [statement/row trade-offs](https://dev.mysql.com/doc/refman/8.4/en/replication-sbr-rbr.html)
+  Primary. Format families, statements/context and row events. Own server event inventory records transaction/row framing, not decoded row images. Use for: Lesson 35.
+- [Manual: MySQL 8.4, GTID functions](https://dev.mysql.com/doc/refman/8.4/en/gtid-functions.html)
+  Primary. WAIT_FOR_EXECUTED_GTID_SET return codes and scope. Actual stopped/running apply results independently reproduced. Use for: Lessons 35, 36.
+- [Docs: AWS RDS, single-standby Multi-AZ DB instances](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html)
+  Primary. Synchronous standby and topology-specific role, not a blanket claim about all RDS replicas. Use for: Lesson 33.
+- [Paper: Session Guarantees for Weakly Consistent Replicated Data, Terry et al., PDIS 1994](https://www.cs.cornell.edu/courses/cs734/2000FA/cached%20papers/SessionGuaranteesPDIS_1.html)
+  Primary paper in Cornell's cached HTML copy. Read-your-writes, monotonic reads and required session history. The initially attempted Microsoft record redirected to its homepage; the Cornell paper was successfully read. Use for: Lesson 36.
+- [Model reference: Jepsen, Causal Consistency](https://jepsen.io/consistency/models/causal)
+  Primary model explanation. Dependency visibility; no assumption that vendor consistency labels have identical scopes. Use for: Lesson 36.
+- [Docs: AWS DynamoDB read consistency](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/HowItWorks.ReadConsistency.html)
+  Primary. Table/LSI vs GSI/stream read choices. Modern DynamoDB is kept distinct from the 2007 Dynamo paper. No service API was exercised. Use for: Lesson 36.
+- [Paper: Dynamo, DeCandia et al., SOSP 2007](https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf)
+  Primary. Relevant version-context/reconciliation and sloppy-membership/hinted-handoff sections read. Original profile, sibling and set-membership examples expose the mechanisms without claiming to emulate Dynamo. Use for: Lessons 37–39, 41.
+- [Paper: Weighted Voting for Replicated Data, Gifford, SOSP 1979](https://www.cs.swarthmore.edu/~newhall/readings/gifford79.pdf)
+  Primary paper in a university-hosted copy. Fixed-universe intersection belongs to a fuller protocol; the course does not transfer its guarantees to arbitrary quorum counting. Use for: Lesson 38.
+- [Docs: Apache Cassandra, Read repair](https://cassandra.apache.org/doc/latest/cassandra/managing/operating/read_repair.html)
+  Primary, documentation identified as 5.0 when checked. Blocking repair and partial-write/monotonic-quorum-read scenario. The lab reproduces a small counterexample, not a Cassandra integration or full protocol. Use for: Lessons 38, 41.
+- [Report: A comprehensive study of Convergent and Commutative Replicated Data Types, Shapiro et al., INRIA RR-7506, 2011](https://www.lip6.fr/Marc.Shapiro/papers/2011/Comprehensive-CRDTs-RR7506-2011-01.pdf)
+  Primary author-hosted report. State-merge laws, PN-counter and observed-remove semantics sections read. The course's set is a small state-based permanent-tombstone implementation, not every algorithm in the report. Initial HAL access was blocked; this author-hosted copy worked. Use for: Lesson 40.
+- Own evidence: `experiments/replication/results/mysql-results.json` and `binlog-events.txt`. `tools/test-replication.js` checks these observations and separately enumerates 21,343 fixed-membership set pairs, bounded vector order, merge laws and failure witnesses. No WAN latency, power failure, live election or production consistency certification was measured.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -201,7 +233,7 @@ Primary pages below were opened and their relevant format/evolution rules checke
 
 - Module 2 follow-ups: MySQL 8.4 LTS / 9.x behavior of the features used (JSON validation, multi-valued indexes, hash join, EXPLAIN ANALYZE); the DynamoDB adjacency-list and GSI pages; the full Stonebraker/Pavlo benchmark tables; the Neo4j/Cypher manual for the variable-length path syntax shown as a sketch; histogram statistics in MySQL (column statistics) for the correlated-predicates discussion; Mongo document size limit and MySQL's JSON size limit.
 
-- MySQL-specific: replication and semi-sync docs, InnoDB isolation levels and MVCC, Group Replication, binlog/GTID, Debezium MySQL connector. (Learner runs MySQL.)
+- MySQL-specific follow-ups: InnoDB isolation levels/MVCC, Group Replication certification and membership, Debezium connector, production parallel-apply visibility and automated failover/recovery. Core asynchronous/semi-sync, binlog and GTID material for Module 5 is now checked above.
 - AWS-specific: RDS and Aurora failover behavior, MSK defaults and configuration, DynamoDB consistency and transactions, SQS standard queue docs, SDK retry modes and defaults per language.
 - Module 1 follow-ups: read the SRE book ch. 3 and the SRE Workbook's SLO and alerting chapters directly (multi-window burn-rate alerting); watch the Krikorian talk; read Hamilton's admission-control section; find a primary queueing text (e.g. a Kleinrock or Harchol-Balter chapter) to replace the Wikipedia citation; AWS CloudWatch percentile statistics and aggregation behavior (not verified).
 - Storage engines: need primary sources for LSM-trees, B-trees/WAL, column stores (LSM paper, Bigtable, a column-store paper, RocksDB/LevelDB docs).

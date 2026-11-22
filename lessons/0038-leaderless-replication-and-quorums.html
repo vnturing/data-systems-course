@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Leaderless replication: what a quorum proves · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 38</p><h1>Leaderless replication: what a quorum proves</h1><p class="lede">R + W > N is a statement about overlapping sets. It becomes a freshness argument only after you name what those sets contain and how versions are interpreted.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Prove or refute read/write intersection for fixed membership, then list the durability, version-ordering and concurrency assumptions the arithmetic does not prove.</div>
+<h2>1. A coordinator need not be a leader</h2>
+<p>In a leaderless design, a coordinator can send a key’s write to several replicas and wait for a chosen number of replies. A read can collect several responses and reconcile versions. “No leader” does not mean no coordinating request process, no membership rule or no conflict policy.</p>
+<p>Let N be the fixed home replica count, W the required write acknowledgements, and R the required read responses. Suppose a completed write is durable on its W responders, no later write intervenes, all sets use the same membership, and a read can correctly identify that version.</p>
+<h2>2. The pigeonhole argument</h2>
+<p>Disjoint sets of sizes W and R would contain W+R different members. If W+R>N, they cannot both fit inside the same N-member universe. Therefore every such read set intersects every such completed write set. With N=3, W=2 and R=2, the minimum intersection has one member.</p>
+<p>Gifford’s weighted-voting work makes intersection part of a fuller protocol with versioning and transactional assumptions.<sup class="c"><a href="#s1">[1]</a></sup> Borrowing its arithmetic does not automatically import the whole protocol or its guarantees.</p>
+<div class="widget" id="sim-quorum"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> enumerate N=3, W=1, R=2 and find a disjoint witness. Increase W to 2. Then choose N=5 and vary the thresholds. The model enumerates all sets; its result is an exact finite combinatorial check, not a simulated network measurement.</p>
+<h2>3. What the intersection does not establish</h2>
+<ul><li><b>A failed write:</b> a timeout can leave data on fewer than W replicas. It may become visible even though no success response was returned.</li><li><b>Concurrency:</b> overlapping write sets do not by themselves serialize writers. A replica might store competing versions or apply a timestamp policy that discards one.</li><li><b>Membership:</b> substituting fallback nodes can make the actual read/write sets disjoint even when their counts satisfy the formula.</li><li><b>Durability:</b> a response from volatile memory does not establish the same failure tolerance as a durable record.</li><li><b>Version choice:</b> a maximum wall-clock stamp need not represent a causally later update.</li></ul>
+<p>For fixed membership, 2W>N additionally gives write/write intersection. Again, two writers contacting a common replica need a protocol at that replica to turn overlap into exclusive ordering. A plain replicated register with quorum counts is not automatically linearizable.</p>
+<h2>4. Repair works through evidence</h2>
+<p><b>Read repair</b> can update stale contacted replicas when a read discovers a newer value. <b>Anti-entropy</b> compares replicas in the background, including keys that readers rarely touch. <b>Hinted handoff</b> retains a deferred delivery for an unavailable destination. These mechanisms have different triggers and failure/retention requirements.</p>
+<p>Apache Cassandra documents its read-repair behavior and how blocking repair can protect monotonic quorum reads in a partial-write scenario.<sup class="c"><a href="#s2">[2]</a></sup> Read repair still cannot discover an unseen value if every contacted replica has the same stale copy. Lesson 41 makes that counterexample executable.</p>
+<h2>5. Sloppy membership changes the theorem’s premise</h2>
+<p>Dynamo’s sloppy-quorum design permits temporary substitutes from a preference list when home nodes are unavailable.<sup class="c"><a href="#s3">[3]</a></sup> If A and D store a write for a home set {A,B,C}, a later read from {B,C} can miss it. R=2, W=2 and N=3 describe counts, but {A,D} was not a subset of the assumed home universe.</p>
+<p>Do not fix that reasoning by silently redefining N for each request. State the actual acknowledged holders, reader responders and handoff assumptions. Dynamo’s 2007 design and modern DynamoDB APIs are different contracts; neither this model nor the paper is a substitute for the service documentation you deploy.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0038"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "For fixed N=3, W=2 and R=2, what does the arithmetic prove?",
+  "options": [
+   "All writes are globally serialized",
+   "Every read sees future writes",
+   "The responder sets must overlap",
+   "All replicas share wall clocks"
+  ],
+  "answer": 2,
+  "why": "It proves a nonempty intersection between sets drawn from the same fixed three-member universe. The protocol must supply the remaining assumptions."
+ },
+ {
+  "q": "Why can a sloppy write to A,D be missed by a read of B,C?",
+  "options": [
+   "The actual sets are disjoint",
+   "The sum is below three",
+   "Every fallback node is durable",
+   "Every reader automatically requests D"
+  ],
+  "answer": 0,
+  "why": "D is outside the declared home set {A,B,C}. The fixed-membership premise no longer holds for the actual write holders."
+ },
+ {
+  "q": "A quorum write times out after updating only A. What may a later read observe?",
+  "options": [
+   "Only values from successful replies",
+   "Nothing until every node restarts",
+   "An automatically erased transaction record",
+   "The partially stored unacknowledged value"
+  ],
+  "answer": 3,
+  "why": "Failure to reach the required acknowledgements is not a rollback of every partial effect. Reads can discover that version."
+ },
+ {
+  "q": "All contacted readers return the same old value. What can read repair infer?",
+  "options": [
+   "That no newer copy exists",
+   "Only their currently observed evidence",
+   "That every hint has arrived",
+   "That every write was serialized"
+  ],
+  "answer": 1,
+  "why": "Repair needs evidence of divergence or a newer version. An uncontacted holder can contain data these responders do not know."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For a quorum claim in a design doc, write the actual membership universe, responders, durability boundary, version ordering and partial-write behavior. Exhibit a set intersection rather than quoting only a formula.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Gifford, <a href="https://www.cs.swarthmore.edu/~newhall/readings/gifford79.pdf">Weighted Voting for Replicated Data</a>, SOSP 1979. Read the protocol assumptions along with its intersection rule.</li><li id="s2">Primary: Apache Cassandra 5.0 documentation, <a href="https://cassandra.apache.org/doc/latest/cassandra/managing/operating/read_repair.html">Read repair</a>.</li><li id="s3">Primary: DeCandia et al., <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf">Dynamo</a>, hinted handoff and sloppy membership. The enumeration and counterexamples are original course exercises.</li></ol>
+<div class="pager"><a href="0037-multi-leader-and-conflicts.html">Lesson 37</a><a href="0039-version-vectors-and-siblings.html">Lesson 39: Version vectors: concurrency without a clock</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

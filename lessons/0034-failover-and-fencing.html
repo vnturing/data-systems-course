@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Failover: choose a history, fence a writer · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 34</p><h1>Failover: choose a history, fence a writer</h1><p class="lede">A failover chooses which history becomes authoritative. A timeout does not tell you which history is complete or whether the old writer has stopped.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Separate candidate selection, received-history recovery, fencing and client routing; distinguish temporarily missing acknowledged data from destruction of every copy.</div>
+<h2>1. Two independent questions</h2>
+<p>After losing contact with A, a controller must decide <b>which history to serve</b> and <b>who may still write</b>. Promoting a fresh follower does not stop A. Stopping A does not make a stale follower fresh. A timeout only creates suspicion, as <a href="0003-system-models.html">Lesson 3</a> demonstrated.</p>
+<pre><code>A: acknowledged [1,2,3]
+B: received     [1,2,3]     applied [1,2]
+C: received     [1,2]       applied [1,2]</code></pre>
+<p>A controller that compares visible rows alone can mistake B and C for equivalent candidates. B has a recoverable tail that C never received. MySQL’s failover documentation treats replication coordinates and source switching as explicit work, not a consequence of changing a hostname.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<div class="widget" id="sim-failover"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> promote C first. Then select B and apply its received tail before serving. Finally fence A. Observe that recovering transaction 3 and eliminating dual writers require different actions.</p>
+<h2>2. Acknowledged does not mean present on every candidate</h2>
+<p>In our real MySQL experiment, we stopped C’s replication before inserting row 4 on A. A acknowledged it and B applied it. We then made stale C writable. Row 4 was absent on C but present on B. Data missing from the newly chosen authority was therefore <b>still recoverable elsewhere</b>; it had not been destroyed on every disk.</p>
+<p>If clients observe absence and issue replacements, recovery becomes more than copying a missing row: later writes may now conflict. Preserve evidence before reconnecting divergent branches. Do not assume an automatic catch-up operation will choose the application’s intended history.</p>
+<h2>3. Split brain is an authority failure</h2>
+<p>We deliberately left A writable after promoting C. A accepted row 5; C accepted row 6. The resulting ID sets were <b>A: {1,2,3,4,5}</b> and <b>C: {1,2,3,6}</b>. These are <a href="../experiments/replication/results/mysql-results.json">executed observations</a> from manual source promotion, not an automated failover product test.</p>
+<p><b>Fencing</b> means the old writer can no longer successfully perform the protected writes. A routing update alone is insufficient if cached connections, old workers or another endpoint can still reach it. The mechanism might revoke access, shut the old writer down, or use an authority-enforced epoch. This lab assumes fencing when selected; it does not implement the mechanism. Leases, fencing tokens and election protocols get deeper treatment in Modules 8 and 9.</p>
+<h2>4. A failover review, in order</h2>
+<ol><li>State the acknowledged-data loss budget and failure model.</li><li>Obtain trustworthy candidate history information; distinguish received and applied state.</li><li>Establish exclusive write authority and choose a candidate containing the required history.</li><li>Recover/apply that history before serving the corresponding reads.</li><li>Move clients, handle uncertain operations and safe retries, then reconcile or rebuild former leaders before reuse.</li></ol>
+<p>The exact sequencing belongs to the actual protocol; this list is a review checklist, not a replacement for a vendor procedure. A source that cannot be contacted may still be alive, and a returning source may contain both valuable history and unauthorized later writes.</p>
+<h2>5. What the model leaves out</h2>
+<p>Its promotion is instantaneous and injected. It has no voting, leases, leader epochs, simultaneous controllers, network delays or recovery implementation. MySQL coordinates and GTIDs identify history; a GTID by itself is not a consensus decision. The old Kafka lab also exposes unsafe elections, but its simplified ISR rules are not a MySQL failover protocol.</p>
+<p>A practical drill should record which writes were acknowledged, what each candidate durably received, what each served after promotion, and whether an old connection can still write. “The endpoint recovered” covers only one of those questions.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0034"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "B and C applied the same prefix, but only B received transaction 3. Which fact matters before promotion?",
+  "options": [
+   "Both nodes have matching names",
+   "C has fewer connection attempts",
+   "B has a recoverable tail",
+   "C automatically owns the source"
+  ],
+  "answer": 2,
+  "why": "Received-but-unapplied history can distinguish candidates that currently expose the same visible rows."
+ },
+ {
+  "q": "What does fencing the former leader need to accomplish?",
+  "options": [
+   "Prevent its protected writes succeeding",
+   "Change only the public hostname",
+   "Erase all historical transaction identifiers",
+   "Make every follower apply instantly"
+  ],
+  "answer": 0,
+  "why": "Routing changes alone may leave old connections or workers able to write. Fencing establishes the write-authority boundary."
+ },
+ {
+  "q": "An acknowledged row is absent on promoted C but remains on B. Which description is accurate?",
+  "options": [
+   "Destroyed across every surviving disk",
+   "Never acknowledged by any source",
+   "Automatically restored by changing DNS",
+   "Missing from the current authority"
+  ],
+  "answer": 3,
+  "why": "The row is absent from the selected read path, but its copy on B remains recoverable. Later divergent writes can still complicate reconciliation."
+ },
+ {
+  "q": "After promotion, A and C both accept independent writes. What has occurred?",
+  "options": [
+   "A completed consensus membership change",
+   "Two active write authorities exist",
+   "Every replica shares one history",
+   "A guaranteed read-only failover happened"
+  ],
+  "answer": 1,
+  "why": "The experiment deliberately creates split brain. Freshness and exclusive write authority must both be established."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Draw your failover path. Identify the evidence for candidate completeness, the mechanism stopping old writes, the treatment of uncertain client operations, and how a former source is admitted again.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/replication-solutions-switch.html">Switching Sources During Failover</a>. Read with the actual topology and coordinates in mind.</li><li>Own experiment: <a href="../experiments/replication/README.md">three-server reproduction</a> and its recorded stale-promotion/divergent-write result. This course’s fencing checklist is a synthesis, not a claim that the experiment tested an election or fencing implementation.</li></ol>
+<div class="pager"><a href="0033-single-leader-replication.html">Lesson 33</a><a href="0035-replication-log-formats.html">Lesson 35: What actually travels in a replication log</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

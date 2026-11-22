@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Single-leader replication and the reply boundary · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 33</p><h1>Single-leader replication and the reply boundary</h1><p class="lede">One source orders writes. The hard question is which other copies exist when the client receives success.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Trace a write through local durability, remote receipt and remote apply; state exactly which failure the acknowledgement can survive.</div>
+<h2>1. Replication is a pipeline</h2>
+<pre><code>client → source commit/log → replica receive/relay log → replica apply → replica read</code></pre>
+<p>A single leader establishes an order for accepted writes. Followers copy that history. They can receive log records before executing the changes, so “the replica has it” is ambiguous. Separate <b>received</b>, <b>durably received</b> and <b>applied</b>. Local durability itself still depends on the persistence contract from <a href="0024-in-memory-databases-and-durability.html">Lesson 24</a>.</p>
+<p>MySQL exposes receiver and applier roles rather than one indivisible replication action.<sup class="c"><a href="#s1">[1]</a></sup> This explains an otherwise surprising observation: the source can finish a replicated commit while a read on a replica returns the previous value.</p>
+<h2>2. Define what the reply waits for</h2>
+<div class="table-scroll"><table><thead><tr><th>Contract</th><th>What success establishes</th><th>What can still be missing</th></tr></thead><tbody><tr><td>Asynchronous, local durable</td><td>The source has its local durable write</td><td>Every remote copy</td></tr><tr><td>One remote durable receipt</td><td>A selected remote log also holds the change</td><td>Remote application; another candidate’s copy</td></tr><tr><td>Both followers applied, in this lab</td><td>All configured followers applied before reply</td><td>Availability when a required follower cannot respond</td></tr></tbody></table></div>
+<p>“Synchronous” is incomplete without the required members and the stage they acknowledge. A remote durable receipt can protect data without making it immediately readable. Waiting for every required follower can put a slow or unavailable follower on the reply path. None of these phrases by itself specifies a safe leader-election protocol.</p>
+<div class="widget" id="sim-replica-ack"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> inspect at tick 4 under the one-remote policy. B has a durable copy but has not applied it. Destroying A does not destroy every copy, but serving B still needs recovery/apply. Make both followers unreachable, then enable fallback. A successful reply after fallback has a weaker contract.</p>
+<h2>3. What real MySQL semi-sync acknowledged</h2>
+<p>MySQL 8.4 semi-synchronous replication acknowledges a replica’s flushed relay-log receipt, not execution of its SQL changes. It can revert to asynchronous behavior after a configured timeout.<sup class="c"><a href="#s2">[2]</a></sup> Therefore configuration intent and actual runtime status are separate evidence.</p>
+<p>We ran MySQL <b>8.4.13</b> with one source and two followers on an internal Docker network. We enabled semi-sync on the source and B, verified one semi-sync client, then stopped only B’s SQL applier. A source insert returned, its successful semi-sync acknowledgement counter increased by <b>1</b>, and B’s visible matching-row count remained <b>0</b>. Starting the applier and waiting for the source GTID made the row visible. <a href="../experiments/replication/results/mysql-results.json">Recorded results</a> and <a href="../experiments/replication/README.md">reproduction</a> preserve the boundary tested.</p>
+<p>This is not a power-loss test, a latency measurement or evidence that any arbitrary follower is a safe failover candidate. Source binlog and InnoDB flush settings were both 1. The model’s tick schedule is illustrative, not calibrated to the experiment’s wall-clock time.</p>
+<h2>4. Copies are useful for different purposes</h2>
+<p>Read scaling, failover and backup are different requirements. An asynchronous follower may improve read capacity while returning stale data. A synchronous standby can support availability without being a query endpoint: RDS’s single-standby Multi-AZ DB instance design documents exactly that distinction.<sup class="c"><a href="#s3">[3]</a></sup> Do not generalize it to every RDS topology or assume every copy can serve reads.</p>
+<p>A destructive application update can replicate successfully to every follower. That does not make replication a point-in-time recovery strategy. Define a backup/recovery history separately.</p>
+<div class="callout"><b class="t">A useful design-doc sentence</b>“We acknowledge after the source commit and one remote durable receipt; reads on followers may lag; failover must choose and recover a replica that contains the required history.” Replace each clause with your actual product’s verified contract.</div>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0033"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "A replica durably received a transaction but has not applied it. What can a read still return?",
+  "options": [
+   "The previous applied record value",
+   "The next unissued transaction value",
+   "Only a corrupted binary record",
+   "Every source transaction without delay"
+  ],
+  "answer": 0,
+  "why": "Receipt and execution are different stages. A durable relay record need not yet be reflected in query results."
+ },
+ {
+  "q": "The source falls back from remote waiting to local-only acknowledgement. What changed?",
+  "options": [
+   "The write became automatically rolled-back",
+   "Every follower applied the transaction",
+   "The success contract became weaker",
+   "The leader election became synchronous"
+  ],
+  "answer": 2,
+  "why": "Replies can now succeed without the previously required remote receipt. Monitor actual behavior, not only configured intent."
+ },
+ {
+  "q": "Why can waiting for all configured followers hurt availability?",
+  "options": [
+   "Every replica becomes a backup",
+   "The leader loses its ordering",
+   "Each transaction changes its schema",
+   "One unavailable follower prevents completion"
+  ],
+  "answer": 3,
+  "why": "An all-required-members policy puts each required member on the reply path. The example illustrates the trade rather than prescribing it."
+ },
+ {
+  "q": "Our semi-sync insert returned while the replica SQL applier was stopped. Which observation matched?",
+  "options": [
+   "The row was already readable",
+   "The acknowledgement counter still increased",
+   "The transaction had no identity",
+   "The replica became source automatically"
+  ],
+  "answer": 1,
+  "why": "The real experiment recorded one additional semi-sync acknowledgement while the matching row remained absent from the stopped applier’s visible state."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>For one write API, list the local and remote persistence stages that precede success. Name the eligible failover copies, the follower read policy and what happens when replication acknowledgement times out.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/replication-threads.html">Replication Threads</a>. Start by distinguishing receiver and applier.</li><li id="s2">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/replication-semisync.html">Semisynchronous Replication</a> and <a href="https://dev.mysql.com/doc/refman/8.4/en/replication-semisync-monitoring.html">monitoring</a>.</li><li id="s3">Primary: AWS RDS, <a href="https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Concepts.MultiAZSingleStandby.html">Multi-AZ DB instance deployments with a single standby</a>.</li><li>Own executed MySQL experiment linked above. The all-applied policy is a teaching contract, not a named MySQL mode.</li></ol>
+<div class="pager"><a href="0032-lab-evolve-a-schema.html">Lesson 32</a><a href="0034-failover-and-fencing.html">Lesson 34: Failover: choose a history, fence a writer</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

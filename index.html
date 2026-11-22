@@ -67,7 +67,18 @@
 <p><span data-lesson-id="0031"></span><a href="lessons/0031-dataflow-through-systems.html"><b>31 &middot; Dataflow through systems</b></a> &mdash; <span style="color:var(--muted)">unknown fields through databases, services and brokers.</span></p>
 <p><span data-lesson-id="0032"></span><a href="lessons/0032-lab-evolve-a-schema.html"><b>32 &middot; Lab: evolve a schema</b></a> &mdash; <span style="color:var(--muted)">three versions, nine pairs, one application invariant.</span></p>
 <p>Reference sheet: <a href="reference/module-4-checklist.html">Module 4 migration-review checklist</a>. Reproduce the byte and compatibility checks with <code>experiments/encoding/</code>.</p>
-<p>The <a href="syllabus.html">full syllabus</a> shows the 8 modules ahead, starting with Module 5: replication.</p>
+<h2>Module 5 · Replication (9 lessons)</h2>
+<p><span data-lesson-id="0033"></span><a href="lessons/0033-single-leader-replication.html"><b>33 &middot; Single-leader replication</b></a> &mdash; <span style="color:var(--muted)">the acknowledgement boundary; real MySQL semi-sync.</span></p>
+<p><span data-lesson-id="0034"></span><a href="lessons/0034-failover-and-fencing.html"><b>34 &middot; Failover and fencing</b></a> &mdash; <span style="color:var(--muted)">choose a history and prevent two write authorities.</span></p>
+<p><span data-lesson-id="0035"></span><a href="lessons/0035-replication-log-formats.html"><b>35 &middot; Replication log formats</b></a> &mdash; <span style="color:var(--muted)">statements, rows, identity and drift.</span></p>
+<p><span data-lesson-id="0036"></span><a href="lessons/0036-replication-lag-anomalies.html"><b>36 &middot; Replication lag anomalies</b></a> &mdash; <span style="color:var(--muted)">session reads, dependencies and GTID barriers.</span></p>
+<p><span data-lesson-id="0037"></span><a href="lessons/0037-multi-leader-and-conflicts.html"><b>37 &middot; Multi-leader and conflicts</b></a> &mdash; <span style="color:var(--muted)">reconcile accepted writes without inventing intent.</span></p>
+<p><span data-lesson-id="0038"></span><a href="lessons/0038-leaderless-replication-and-quorums.html"><b>38 &middot; Leaderless replication and quorums</b></a> &mdash; <span style="color:var(--muted)">what the intersection formula proves.</span></p>
+<p><span data-lesson-id="0039"></span><a href="lessons/0039-version-vectors-and-siblings.html"><b>39 &middot; Version vectors and siblings</b></a> &mdash; <span style="color:var(--muted)">causal context and deletion evidence.</span></p>
+<p><span data-lesson-id="0040"></span><a href="lessons/0040-crdts-and-merge.html"><b>40 &middot; CRDTs and merge</b></a> &mdash; <span style="color:var(--muted)">operate counters and observed-remove sets.</span></p>
+<p><span data-lesson-id="0041"></span><a href="lessons/0041-lab-break-a-quorum.html"><b>41 &middot; Lab: break a quorum</b></a> &mdash; <span style="color:var(--muted)">challenge membership and partial-write assumptions.</span></p>
+<p>Reference sheet: <a href="reference/module-5-checklist.html">Module 5 replication-review checklist</a>. Evidence and reproduction: <code>experiments/replication/</code>.</p>
+<p>The <a href="syllabus.html">full syllabus</a> shows the 7 modules ahead, starting with Module 6: partitioning.</p>
 
 <h2>Who it's for</h2>
 <p>Developers comfortable with SQL, services and production systems who are new to the distributed-systems side. If you've ever been surprised by a duplicate message, a stale read, or a failover that lost writes, this is for you.</p>

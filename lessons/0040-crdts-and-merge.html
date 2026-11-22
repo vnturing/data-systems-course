@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CRDTs: design the merge before the outage · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 40</p><h1>CRDTs: design the merge before the outage</h1><p class="lede">A good replicated data type defines how states combine before messages are delayed, duplicated or reordered.</p>
+<div class="meta"><span>~35 min</span><span>2 interactives</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Explain state-based merge laws, operate a PN-counter and observed-remove set, and separate convergence from application admission invariants.</div>
+<h2>1. The merge laws do work</h2>
+<p>For a state-based CRDT, design a merge that is <b>commutative</b> (order does not matter), <b>associative</b> (grouping does not matter) and <b>idempotent</b> (repeated state has no extra effect). Local updates must advance state in the appropriate partial order. With the required state eventually disseminated, those properties support convergence.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>This is a delivery contract plus a data type, not permission to lose updates forever. Operation-based CRDTs have different delivery requirements: a plain “increment by one” message repeated twice increments twice unless its protocol prevents duplicate application. State-based idempotence does not transfer to every operation stream.</p>
+<h2>2. A single total loses information</h2>
+<p>If A and B each increment their local total from 0 to 1, max(1,1) loses one increment. Adding their totals gets 2 initially, then double-counts when the same states are delivered again. Keep per-actor accumulated contributions instead.</p>
+<pre><code>A state: {A:1}     B state: {B:1}
+merge:   {A:1,B:1}     value = 2
+merge that same B state again: value remains 2</code></pre>
+<p>Each actor owns its monotone component. Merge takes the maximum for each actor; the displayed total is the sum. To support decrements, keep separate monotone positive and negative components: value = sum(P) − sum(N). A decrement increases a negative component; it does not move a stored component backward.</p>
+<div class="widget" id="sim-crdt-counter"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> increment A and B independently, merge both ways, then repeat a merge. Decrement on one side and exchange state again. These are actual state operations; the tests check merge laws and delivery orders on bounded cases, not a production network.</p>
+<h2>3. Set removal needs an observed target</h2>
+<p>A simple union of ordinary sets preserves additions, but cannot represent a removal once an old state containing the item returns. Our observed-remove example gives each addition a unique tag, and records the specific tags a removal saw.</p>
+<div class="widget" id="sim-observed-remove"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>A removes the shared old book tag S:1. Concurrently, B adds a new book tag B:1 that A did not observe. Merging retains B:1, so book remains present: the example declares add-wins semantics for this concurrent add/remove. If both only remove the old tag, book disappears.</p>
+<p>The tag identifies an addition, not merely the element name. The toy retains all removed tags forever; optimized causal set designs can use other metadata, but cannot arbitrarily forget the evidence. A unique tag must not later be reused for a different addition.</p>
+<h2>4. Convergent is not automatically acceptable</h2>
+<p>The PN-counter happily merges two decrements against one starting stock unit into −1. It preserved the updates correctly; the application admitted two sales against insufficient rights. CRDT convergence alone does not enforce stock ≥ 0, global uniqueness, or an arbitrary cross-record constraint.</p>
+<p>Choose a type whose concurrent semantics match the feature. Add-wins may be right for one collaborative collection and wrong for a security revocation rule. A deterministic result is valuable only when it is the result the application intended to permit.</p>
+<h2>5. State the assumptions around the algebra</h2>
+<ul><li>Stable actor identities and monotone durable components; no counter reset masquerading as the same actor.</li><li>Unique addition tags and a justified metadata reclamation protocol.</li><li>Eventual dissemination of the necessary state, with recovery preserving the type’s assumptions.</li><li>Numeric representation without overflow in the range being claimed.</li><li>A domain invariant compatible with independently accepted operations.</li></ul>
+<p>The browser has two actors, small exact integer counts, no persistent storage, no optimized garbage collection and no operation-based transport. It demonstrates the data structures and their limits rather than certifying a distributed service.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0040"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Which state-merge property prevents duplicate state delivery from double-counting?",
+  "options": [
+   "Idempotence of the merge operation",
+   "Ordering by each wall clock",
+   "Increasing the final scalar total",
+   "Discarding every remote actor component"
+  ],
+  "answer": 0,
+  "why": "Merging the same state again has no additional effect. This is a property of the state merge, not arbitrary increment messages."
+ },
+ {
+  "q": "Why does the counter retain per-actor components rather than one total?",
+  "options": [
+   "To synchronize every physical clock",
+   "To remove all network messages",
+   "To preserve contributions without duplication",
+   "To forbid negative application totals"
+  ],
+  "answer": 2,
+  "why": "Componentwise max preserves each actor’s accumulated contribution while tolerating repeated state delivery. Separate P and N components support decrements."
+ },
+ {
+  "q": "A removes tag S:1 while B concurrently adds the same item with tag B:1. What survives in this declared set?",
+  "options": [
+   "No additions under any circumstances",
+   "Only the removed tag forever",
+   "A new automatically generated deletion",
+   "The unobserved fresh addition B:1"
+  ],
+  "answer": 3,
+  "why": "Observed-remove semantics target the additions seen by the removal. The new concurrent tag survives under this add-wins rule."
+ },
+ {
+  "q": "A replicated counter converges to stock -1 after two isolated sales. What does this show?",
+  "options": [
+   "The replicas cannot ever converge",
+   "Convergence does not enforce admission",
+   "Every counter merge was noncommutative",
+   "Every decrement lacked an identifier"
+  ],
+  "answer": 1,
+  "why": "The data type can correctly preserve both sales while the application violates its stock invariant. Admission needs appropriate coordination or rights."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Choose one counter or collection in your product. Define its intended concurrent semantics, actor identity, delivery contract and invariant. Explain a repeated-delivery case and a concurrent removal before choosing a CRDT.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Shapiro, Preguiça, Baquero and Zawirski, <a href="https://www.lip6.fr/Marc.Shapiro/papers/2011/Comprehensive-CRDTs-RR7506-2011-01.pdf">A comprehensive study of Convergent and Commutative Replicated Data Types</a>, INRIA RR-7506, 2011. Start with state-based counters and observed-remove semantics.</li><li>The counter arithmetic, permanent-tombstone set and bounded property tests are original executable course implementations. They are not an optimized CRDT library or an implementation of every type in the report.</li></ol>
+<div class="pager"><a href="0039-version-vectors-and-siblings.html">Lesson 39</a><a href="0041-lab-break-a-quorum.html">Lesson 41: Lab: break a quorum on purpose</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

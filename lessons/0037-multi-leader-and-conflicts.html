@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Multi-leader replication and conflict policy · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 37</p><h1>Multi-leader replication and conflict policy</h1><p class="lede">Two locations can accept writes during disconnection. When they reconnect, a merge policy must decide what those accepted writes mean together.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Identify concurrent conflicts, distinguish deterministic convergence from preserving user intent, and decide when single-writer ownership is worth the availability cost.</div>
+<h2>1. Why accept writes at more than one leader?</h2>
+<p>A disconnected editor or independently operating region may need local writes while a remote site cannot be reached. A single global writer can make that path unavailable or slow. Allowing local acceptance moves the hard question from “can I commit now?” to “how do accepted histories combine?”</p>
+<p>This is not ordinary single-leader failover with one winner. It intentionally permits multiple writers. MySQL’s ability to receive multiple replication sources should not be mistaken for an automatic application conflict-resolution system. Our profile example is a design exercise, not a configured MySQL multi-leader deployment.</p>
+<h2>2. Conflicts can happen without touching the same field</h2>
+<pre><code>base profile: {name: Ada,   city: Harare}
+A writes:     {name: Alice, city: Harare}
+B writes:     {name: Ada,   city: Mutare}</code></pre>
+<p>Both clients read the base. Whole-record last-write-wins selection can discard either the name change or the city change. A field-aware protocol could preserve both independent changes. If both edit the name, a field merge alone cannot determine which spelling the user intended.</p>
+<div class="widget" id="sim-multi-leader"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> compare whole-record selection with independent-field/sibling preservation. Switch to same-field edits. Then move A’s clock offset: timestamp selection can prefer an earlier real-time update because its clock reads higher. Neither update observed the other, so both remain concurrent regardless of wall-clock order.</p>
+<h2>3. Last-write-wins is a resolution rule, not intent detection</h2>
+<p>A deterministic total ordering, including a tie-break rule, can make replicas select the same winner after they learn the same candidates. That is useful convergence. It does not establish that the winner was causally newer or that losing a user’s accepted edit was acceptable.</p>
+<p>The Dynamo paper makes application-assisted reconciliation explicit rather than pretending that storage can infer every business merge.<sup class="c"><a href="#s1">[1]</a></sup> Keeping siblings preserves evidence but creates a handling obligation for readers, retries and later writes. Ignoring the second branch simply moves data loss into application code.</p>
+<p>“Merge fields” is also incomplete: representations need per-field change/causal metadata so that an unchanged old field is not confused with an intentional reset. The widget knows which fields each example changed; it does not implement that wire protocol.</p>
+<h2>4. The inventory counterexample</h2>
+<p>Choose two sales against one stock unit. Each disconnected location sees stock 1 and accepts a sale. A perfect merge that preserves both sales yields stock <b>−1</b>. A merge that keeps stock at zero by discarding one sale may lose a promise already made to a customer.</p>
+<p>The problem is the <em>admission invariant</em>, not merely representation convergence. A single authority, coordinated reservation or preallocated spending rights can constrain acceptance. If one unit is assigned to one region, the other region cannot independently promise that same unit during disconnection. Availability must be stated per operation and right, not just per database.</p>
+<p>CRDTs in Lesson 40 provide useful merge semantics. They do not make every arbitrary invariant safe without coordination. We keep bounded-rights allocation as a design option rather than claiming to implement it here.</p>
+<h2>5. Reduce conflicts before resolving them</h2>
+<ol><li>Partition ownership when a record can have one writer at a time.</li><li>Use immutable additions or append-only facts when those match the operation.</li><li>Choose explicit merge semantics for counters, sets or independently changed fields.</li><li>Preserve unresolved alternatives when application judgment is required.</li><li>Coordinate or allocate rights for invariants that unsafe concurrent acceptance can violate.</li></ol>
+<p>The correct choice depends on the mission: what user promise must survive failures? A system can be available and convergent while still violating the feature’s contract. The next lessons supply vocabulary for observing concurrency and constructing more principled merges.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0037"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "Two clients change different fields, but each writes a whole profile. What can whole-record winner selection lose?",
+  "options": [
+   "The other independently changed field",
+   "Only records with invalid syntax",
+   "Every network acknowledgement automatically disappears",
+   "Nothing because fields are different"
+  ],
+  "answer": 0,
+  "why": "A whole-record winner includes unchanged old values for other fields. Selecting that record can discard an independent update."
+ },
+ {
+  "q": "A larger wall-clock stamp wins. What does that prove about causal observation?",
+  "options": [
+   "The writer observed every alternative",
+   "The write must be newest",
+   "Nothing about which updates interacted",
+   "The other branch never existed"
+  ],
+  "answer": 2,
+  "why": "Physical-clock ordering and a tie-break can select a winner without showing that it observed the other branch."
+ },
+ {
+  "q": "Two isolated regions each sell the only unit. A merge preserves both decrements. What is the outcome?",
+  "options": [
+   "Guaranteed nonnegative stock without coordination",
+   "An automatically rejected second acknowledgement",
+   "A source election with fencing",
+   "Converged state can violate inventory"
+  ],
+  "answer": 3,
+  "why": "Both locally accepted sales survive, so the merged stock is -1. Convergence does not establish the admission invariant."
+ },
+ {
+  "q": "What does preserving concurrent siblings achieve?",
+  "options": [
+   "It resolves every business disagreement",
+   "It retains alternatives needing resolution",
+   "It guarantees one global writer",
+   "It removes all causal metadata"
+  ],
+  "answer": 1,
+  "why": "Siblings keep evidence of concurrent versions. Readers and future writes still need an explicit reconciliation contract."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Name a feature that accepts writes in two places. Write its conflict unit, merge rule, acceptable lost information and any invariant that two disconnected writers could violate. Consider single-writer ownership before proposing a complex merge.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: DeCandia et al., <a href="https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf">Dynamo</a>, SOSP 2007, application-assisted version reconciliation. Start with its data-versioning section.</li><li>Profile, clock-offset and inventory traces are original counterexamples. They are not benchmarks or claims that a named vendor implements the widget’s policies.</li></ol>
+<div class="pager"><a href="0036-replication-lag-anomalies.html">Lesson 36</a><a href="0038-leaderless-replication-and-quorums.html">Lesson 38: Leaderless replication: what a quorum proves</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>

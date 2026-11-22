@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>What actually travels in a replication log · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-5-checklist.html">Module 5 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 5 · Lesson 35</p><h1>What actually travels in a replication log</h1><p class="lede">Followers need a description of changes. Replaying a SQL expression, reproducing a row image and replaying a storage-page operation are different contracts.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Distinguish statement, row and physical logging; explain transaction identity and why replay does not automatically detect pre-existing drift.</div>
+<h2>1. Three representations</h2>
+<div class="table-scroll"><table><thead><tr><th>Representation</th><th>What crosses the boundary</th><th>Important coupling</th></tr></thead><tbody><tr><td>Statement</td><td>The operation to execute, plus required context</td><td>Execution semantics and relevant state</td></tr><tr><td>Row / logical change</td><td>Which logical rows changed and their logged images</td><td>Schema, keys and row-image rules</td></tr><tr><td>Physical / physiological</td><td>Storage structures such as pages and log records</td><td>Engine recovery rules and storage layout</td></tr></tbody></table></div>
+<p>These are families, not one universal wire format. MySQL’s binary log supports statement, row and mixed formats; InnoDB’s local redo log serves a different recovery purpose.<sup class="c"><a href="#s1">[1]</a></sup> Do not call every log the WAL and assume interchangeable consumers.</p>
+<h2>2. The input state is part of a statement</h2>
+<pre><code>source balance = 100
+replica balance = 90        // already drifted
+UPDATE account SET balance = balance + 10;</code></pre>
+<p>Re-executing this expression produces 110 on the source and 100 on the replica. The expression is deterministic, yet the input states differ. Nondeterministic functions, session settings and statement context introduce further concerns; MySQL documents which statements are unsafe and how row logging avoids some statement-reexecution hazards.<sup class="c"><a href="#s2">[2]</a></sup> That does not mean every function is naively reevaluated without context.</p>
+<div class="widget" id="sim-replication-log"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> remove the initial drift and compare formats. Restore the drift. Then deliver twice and toggle transaction identity recognition. The toy row event assigns one full after-image. A real format can use different row-image settings and can encounter errors rather than silently repairing a mismatched row.</p>
+<h2>3. Actual events, not just SQL text</h2>
+<p>Our MySQL servers ran row-format binlogging. The source’s <a href="../experiments/replication/results/binlog-events.txt">event inventory</a> includes <code>Gtid</code>, <code>Query</code>, <code>Table_map</code>, <code>Write_rows</code> and <code>Xid</code> entries. Row-format logging still includes metadata and transaction framing; it does not mean that every event is a row image.</p>
+<p>We used the server’s SHOW BINLOG EVENTS because the container image lacks mysqlbinlog. This inventory identifies event types and positions; it does <b>not</b> decode every column value. The source/replica query checks separately establish that the inserted rows were applied.</p>
+<h2>4. Identity, order and transaction boundaries</h2>
+<p>A replay stream needs a way to know what is already applied. In MySQL’s GTID setup, transactions have identifiers and the executed set can be inspected or waited on.<sup class="c"><a href="#s3">[3]</a></sup> Positions and identities answer “where am I?”; they do not decide which divergent history should win.</p>
+<p>Order and transaction boundaries also matter. If two row changes belong to one transaction, exposing half to an ordinary read can break its invariant. A parallel applier may execute work concurrently while preserving configured commit-order constraints; do not infer an implementation’s complete visibility semantics from a sequential toy.</p>
+<p>Replaying an after-image assignment twice happens to be harmless in our one-cell example. Replaying an insert can hit a duplicate key; replaying a delete or a more elaborate update needs its actual semantics. Log-level deduplication and application-level exactly-once effects remain distinct.</p>
+<h2>5. Logs are not an integrity proof</h2>
+<p>The widget leaves an unrelated bad row unchanged: source 70, replica 60. A perfectly delivered stream of future changes can leave untouched historical divergence undetected. Initial bootstrap must connect a consistent snapshot with the right log boundary; later integrity checks and repair are additional mechanisms.</p>
+<p>Module 4’s schema-evolution work applies here too: a logical log consumer needs the schema that describes the event and a valid mapping into its current model. Physical recovery formats introduce different engine/version coupling. A replication-log choice changes which assumptions must match, not whether assumptions exist.</p>
+<h2>Check yourself</h2><div class="quiz" data-lesson-id="0035"></div><script type="application/json" id="quiz-data">[
+ {
+  "q": "A deterministic increment runs on source 100 and replica 90. Why can results diverge?",
+  "options": [
+   "Their input states already differ",
+   "The query has no syntax",
+   "All SQL increments are random",
+   "Row logging forbids integer values"
+  ],
+  "answer": 0,
+  "why": "Deterministic execution gives the same result only under the relevant same-state assumptions."
+ },
+ {
+  "q": "What does our SHOW BINLOG EVENTS capture establish?",
+  "options": [
+   "Every decoded column value exactly",
+   "A full storage latency benchmark",
+   "The actual recorded event types",
+   "A complete consensus election history"
+  ],
+  "answer": 2,
+  "why": "The server inventory shows framing and row-event types. It is not a decoded row-value dump or a performance benchmark."
+ },
+ {
+  "q": "Why is repeating the toy row assignment harmless without deduplication?",
+  "options": [
+   "Every row event is commutative",
+   "Every insert succeeds repeatedly forever",
+   "GTIDs erase all application retries",
+   "This assignment sets one value"
+  ],
+  "answer": 3,
+  "why": "The toy repeats balance=110. That narrow idempotence does not generalize to arbitrary row events or external effects."
+ },
+ {
+  "q": "A row never touched by new events is already wrong. What does stream replay alone guarantee?",
+  "options": [
+   "It validates every existing record",
+   "Nothing about that untouched mismatch",
+   "It automatically restores the bootstrap",
+   "It removes every historical schema"
+  ],
+  "answer": 1,
+  "why": "Replication of future changes need not inspect unchanged data. Bootstrap correctness and integrity/repair checks are separate requirements."
+ }
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: apply the mechanism (20 minutes)</b></summary><p>Identify the log consumed by one follower or CDC job. Record representation, transaction identity, schema source, bootstrap boundary and how an unrelated old mismatch would be detected.</p></details>
+<p>Ask the course agent about any unclear result. Include the topology, acknowledgement contract and exact failure or message sequence.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/replication-formats.html">Replication Formats</a>.</li><li id="s2">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/replication-sbr-rbr.html">Statement-Based and Row-Based Replication</a>. Start with the trade-offs and exceptions.</li><li id="s3">Primary: MySQL 8.4, <a href="https://dev.mysql.com/doc/refman/8.4/en/gtid-functions.html">GTID functions</a>. Own event inventory and replica queries are recorded in the experiment directory.</li></ol>
+<div class="pager"><a href="0034-failover-and-fencing.html">Lesson 34</a><a href="0036-replication-lag-anomalies.html">Lesson 36: Replication lag: name the broken guarantee</a></div><footer class="foot">Original course material, grounded in the public sources cited. Browser models simplify mechanisms and do not certify a production system.</footer></main><script src="../assets/sim-replication.js"></script><script src="../assets/ui-replication.js"></script></body></html>
