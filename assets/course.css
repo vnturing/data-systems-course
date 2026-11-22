@@ -99,4 +99,9 @@ footer.foot{margin-top:4rem;border-top:1px solid var(--rule);padding-top:1rem;fo
 .module li{margin:.28rem 0}
 .module li .why{color:var(--muted)}
 .status-built{color:var(--ok)}.status-planned{color:var(--muted)}
+.table-scroll{overflow-x:auto}
+.widget select{max-width:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:.35rem}
+.widget input[type="range"]{max-width:100%;vertical-align:middle}
+.widget output{font-variant-numeric:tabular-nums;font-weight:600}
+.widget label{min-width:0;max-width:100%}
 @media print{.topbar,.widget .btn,.pager,.no-print{display:none!important}body{background:#fff;color:#000}main{max-width:none;padding:0}html{font-size:11pt}}

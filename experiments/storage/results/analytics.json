@@ -1,0 +1,76 @@
+{
+  "environment": {
+    "duckdb": "1.4.2",
+    "pyarrow": "22.0.0",
+    "rows": 200000,
+    "row_group_size": 10000,
+    "seed": 42
+  },
+  "layouts": {
+    "sorted": {
+      "file_bytes": 58006852,
+      "all_column_chunk_bytes": 57962312,
+      "projected_chunk_bytes": 129149,
+      "eligible_projected_chunk_bytes": 6411,
+      "row_groups": 20,
+      "eligible_row_groups": 1,
+      "count": 10000,
+      "sum": 5982595
+    },
+    "shuffled": {
+      "file_bytes": 58810222,
+      "all_column_chunk_bytes": 58765622,
+      "projected_chunk_bytes": 466852,
+      "eligible_projected_chunk_bytes": 466852,
+      "row_groups": 20,
+      "eligible_row_groups": 20,
+      "count": 10000,
+      "sum": 5982595
+    }
+  },
+  "encoding": {
+    "sorted": {
+      "plain": 800061,
+      "dictionary": 104,
+      "dictionary_zstd": 122
+    },
+    "shuffled": {
+      "plain": 800061,
+      "dictionary": 50490,
+      "dictionary_zstd": 50509
+    }
+  },
+  "rollup": [
+    [
+      1,
+      "EU",
+      400,
+      2
+    ],
+    [
+      1,
+      null,
+      400,
+      2
+    ],
+    [
+      2,
+      "US",
+      900,
+      1
+    ],
+    [
+      2,
+      null,
+      900,
+      1
+    ],
+    [
+      null,
+      null,
+      1300,
+      3
+    ]
+  ],
+  "cube_rows": 7
+}

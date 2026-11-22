@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Materialized views and data cubes · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 27</p>
+<h1>Materialized views and data cubes</h1>
+<p class="lede">The cheapest repeated aggregation can be the one already computed. Its cost moves to keeping the answer correct.</p>
+<div class="meta"><span>~35 min</span><span>1 maintenance lab</span><span>real roll-up results</span><span>module capstone</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Maintain a grouped sum through inserts, updates, deletes and duplicate delivery; explain the freshness contract; and decide which aggregate state can answer a coarser question.</div>
+
+<h2>1. Store the answer, then own its maintenance</h2>
+<p>A normal view defines a query. A materialized view stores its result. PostgreSQL&rsquo;s documentation illustrates the distinction and explicit refresh: reads can be quicker while the stored result can be stale.<sup class="c"><a href="#s1">[1]</a></sup> In this lesson, a &ldquo;materialized view&rdquo; includes a summary table maintained by your application; it does not imply that MySQL has PostgreSQL&rsquo;s CREATE MATERIALIZED VIEW command.</p>
+<p>For a repeated revenue-by-region report, store <code>(region, sum_amount, count_orders)</code>. Instead of rescanning every order on every request, read a few group rows. A full refresh recomputes from the base data. Incremental maintenance applies the change to the answer. Gupta and Mumick&rsquo;s survey develops the maintenance problem and its trade-offs.<sup class="c"><a href="#s2">[2]</a></sup></p>
+
+<h2>2. An update is a retraction plus an insertion</h2>
+<pre><code>insert EU/100:                  EU.sum += 100; EU.count += 1
+update EU/300 to US/500:        EU.sum -= 300; EU.count -= 1
+                               US.sum += 500; US.count += 1
+delete EU/100:                  EU.sum -= 100; EU.count -= 1</code></pre>
+<p>An update can change both the measure and its grouping key. An after-image alone saying US/500 does not tell you to retract EU/300. You need the before-image or maintained per-order state from which to recover it. Deletes need the old contribution too.</p>
+<div class="widget" id="sim-views"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> predict the replayed update&rsquo;s error, then enable deduplication. Uncheck atomic commit. Finally select lag. A stale but internally correct view and a corrupted view require different repairs.</p>
+<p>After all five distinct events, only two US orders remain: 500 and 900, for sum <b>1,400</b> and count <b>2</b>. Replaying the move without protection subtracts EU/300 and adds US/500 again. A negative EU count is a symptom of corruption, not useful business data.</p>
+
+<h2>3. The crash-point drill returns</h2>
+<p>Deduplication needs a stable event identity. It also needs the marker and view delta to commit together. If the consumer changes the summary, crashes before recording the event ID, then retries, the delta is applied twice. This is <a href="0002-what-if-it-dies-right-here.html">Lesson 2&rsquo;s drill</a> at a different boundary.</p>
+<pre><code>BEGIN
+  insert unique event ID into processed_events
+  if newly inserted: retract old contribution; add new contribution
+COMMIT
+acknowledge delivery only after commit</code></pre>
+<p>This is a transaction sketch, not runnable SQL. Handle the duplicate insert so the transaction skips the delta; use transactional tables, atomic arithmetic and suitable locking for concurrent group updates. If the marker and view live in different systems, the local transaction shown does not span them. Atomic source mutation plus summary maintenance in one database is another option, with extra work on the source write path.</p>
+<p>The widget injects a crash after the first e4 delta and before its marker in the broken variant. Its events are ordered. It does not solve concurrent consumers, missing events or out-of-order updates. Those require a protocol with enough identity, version and prior-state information to decide which change belongs next.</p>
+
+<h2>4. A cube is a family of grouping questions</h2>
+<p>Group daily sales by region. You may also want daily totals across all regions, regional totals across all days, and the grand total. The data cube operator generalizes these related aggregations.<sup class="c"><a href="#s3">[3]</a></sup> For two dimensions:</p>
+<div class="table-scroll"><table><thead><tr><th>Grouping set</th><th>Question</th></tr></thead><tbody><tr><td>(day, region)</td><td>Each day and region</td></tr><tr><td>(day)</td><td>Each day, all regions</td></tr><tr><td>(region)</td><td>Each region, all days</td></tr><tr><td>()</td><td>Grand total</td></tr></tbody></table></div>
+<p><code>CUBE(day, region)</code> includes all four. <code>ROLLUP(day, region)</code> includes the first, second and fourth: it follows one hierarchy, so it omits region-only totals. For <em>d</em> dimensions there are 2<sup>d</sup> grouping sets in the full cube, not merely <em>d</em> output rows. Actual cells depend on cardinality; full precomputation can grow quickly.</p>
+<pre><code>-- Executed on DuckDB 1.4.2 by experiments/storage/analytics.py:
+SELECT day, region, SUM(amount), COUNT(*)
+FROM facts GROUP BY ROLLUP(day, region);
+
+-- MySQL 8.4 spelling for the same hierarchy:
+SELECT day, region, SUM(amount), COUNT(*)
+FROM facts GROUP BY day, region WITH ROLLUP;</code></pre>
+<p>For facts (day 1, EU, 100), (day 1, EU, 300), (day 2, US, 900), the recorded DuckDB roll-up has five rows, including grand sum 1,300 and count 3. Its CUBE has seven rows. These operators compute grouping results; they do not themselves make a permanently maintained materialized cube. Subtotal NULLs need distinguishing from real NULL dimension values using grouping metadata.</p>
+
+<h2>5. Keep sufficient state</h2>
+<p>Sums and counts roll up by addition. An average needs both: EU has mean 200 over two orders; US has mean 900 over one. Averaging the means gives 550; the correct overall mean is 1,300/3, about 433.33.</p>
+<p>MIN is cheap to extend on insertion, but deleting the minimum needs the next candidate, which the minimum alone does not retain. Exact distinct counts do not add across overlapping groups. A daily distinct-user count cannot generally answer monthly distinct users. Keep enough underlying state, recompute, or choose an approximation with an explicit error contract.</p>
+<div class="callout"><b class="t">Module 3&rsquo;s closing design question</b>A secondary index is a maintained alternate access path. A column projection is a maintained layout for selected values. A materialized view is a maintained answer. For each, ask: which reads become cheaper, what do writes maintain, how does recovery rebuild it, and which source defines truth?</div>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0027"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"An order moves from EU/300 to US/500. What must an incremental regional summary do?","options":["Only add the new amount","Only subtract the old amount","Average both amounts before insertion","Retract EU/300 then add US/500"],"answer":3,"why":"Both the measure and grouping key changed. Leaving the old contribution behind double-counts the order."},
+{"q":"A crash occurs after the summary delta but before the dedupe marker. What does retry risk?","options":["Only delaying the next snapshot","Applying the same delta again","Automatically rolling back both systems","Losing every previous base record"],"answer":1,"why":"The missing marker makes the retry look new. The delta and marker must commit atomically for this pattern to protect the view."},
+{"q":"To roll daily averages into a monthly average, which state is sufficient for nonempty groups?","options":["Each group's sum and count","Each group's average and minimum","Only each group's displayed average","Only the largest group's count"],"answer":0,"why":"Add sums and counts, then divide. Averaging averages weights groups equally instead of weighting their individual records."},
+{"q":"Which grouping is in CUBE(day, region) but absent from ROLLUP(day, region)?","options":["The combined day-region detail groups","The totals across every dimension","The region-only totals across days","The day-only totals across regions"],"answer":2,"why":"ROLLUP follows (day,region), (day), (). CUBE additionally includes (region). Neither syntax by itself promises maintained storage."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: review a stored answer (20 minutes)</b></summary><p>Pick a counter, dashboard or summary table. Name the base grain, maintenance mode, dedupe identity, crash boundary, freshness contract and rebuild procedure. Try an update that changes the grouping key and a deletion of an extreme value. Explain what state each repair needs.</p></details>
+<p>Ask the course agent to run the crash-point drill on your proposed summary design. Continue with <a href="../reference/module-3-checklist.html">the completed Module 3 checklist</a>; Module 4&rsquo;s encoding and evolution lessons remain planned in the syllabus.</p>
+<h2>Sources and next reading</h2>
+<ol class="sources"><li id="s1">Primary: PostgreSQL 17 manual, <a href="https://www.postgresql.org/docs/17/rules-materializedviews.html">Materialized Views</a>.</li><li id="s2">Primary: Gupta and Mumick, <a href="https://homepages.inf.ed.ac.uk/wenfei/qsx/reading/gupta95maintenance.pdf">Maintenance of Materialized Views: Problems, Techniques, and Applications</a>, IEEE Data Engineering Bulletin, 1995. Start with its introduction.</li><li id="s3">Primary: Gray et al., <a href="https://www.cs.cmu.edu/~natassa/courses/15-721/papers/cube_op.pdf">Data Cube: A Relational Aggregation Operator Generalizing Group-By, Cross-Tab, and Sub-Totals</a>, 1997. Lab deltas, replay protocol and arithmetic examples are this course&rsquo;s synthesis.</li><li>Own executed grouping results: <a href="../experiments/storage/results/analytics.json">analytics.json</a>. MySQL syntax and subtotal metadata: <a href="https://dev.mysql.com/doc/refman/8.4/en/group-by-modifiers.html">MySQL 8.4, GROUP BY Modifiers</a> and <a href="../experiments/storage/results/rollup-mysql84.txt">our executed results</a>.</li></ol>
+<div class="pager"><a href="0026-column-storage-compression-and-vectors.html">Lesson 26: Columns and vectors</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a></div>
+<footer class="foot">Original course material, grounded in the public sources cited.</footer>
+</main><script src="../assets/sim-storage-extra.js"></script><script src="../assets/ui-storage-extra.js"></script></body></html>

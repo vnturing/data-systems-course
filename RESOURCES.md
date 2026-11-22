@@ -113,6 +113,40 @@ Verification status: entries below were located and checked via web search on 20
 - Secondary, shown only as a caution that published RocksDB write-amplification figures disagree (about 5x to 30x): mintlify.com/facebook/rocksdb/guide/tuning-performance; martinuke0.github.io posts on RocksDB compaction (May 2026). Use for: Lesson 19.
 - Own measurements: `experiments/storage/measurements.json` and `results/` (real InnoDB 8.0.46 and RocksDB via rocksdict 0.3.29).
 
+### Added 2026-11-22 (Module 3, Lessons 23 to 27)
+
+The primary documents below were opened during this session. Claims in the new lessons distinguish documentation, our own executable experiments, and simplified browser models.
+
+- [Manual: MySQL 8.4, Clustered and Secondary Indexes](https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html)
+  Primary. Clustered row storage, secondary entries include primary-key columns, primary-key width cost. Use for: Lesson 23.
+- [Manual: MySQL 8.4, Multiple-Column Indexes](https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html)
+  Primary. Lexicographic compound keys and leftmost prefixes. Our own experiment additionally demonstrated status tightening a lower boundary after a date range; do not turn the prefix rule into “later columns never matter.” Use for: Lesson 23.
+- [Manual: MySQL 8.4, Optimizing Queries with EXPLAIN](https://dev.mysql.com/doc/refman/8.4/en/using-explain.html) and [Index Condition Pushdown](https://dev.mysql.com/doc/refman/8.4/en/index-condition-pushdown-optimization.html)
+  Primary. Plan interpretation and predicates evaluated from secondary entries before fetching rows. Actual plans are recorded from MySQL 8.4.13, including ICP-off and ICP-on variants. Use for: Lesson 23.
+- [Docs: Redis persistence](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/)
+  Primary. RDB/AOF recovery, fsync policies, snapshot/rewrite costs, preference for AOF when both mechanisms are enabled. Process-crash observations independently reproduced on Redis 7.4.12; host/power-loss behavior was not tested. Use for: Lesson 24.
+- [API manual: Linux fsync(2), Linux man-pages](https://man7.org/linux/man-pages/man2/fsync.2.html)
+  Primary API documentation. File synchronization boundary and directory caveat. Linux contract, not a hardware validation or macOS experiment. Use for: Lesson 24.
+- [Paper: “One Size Fits All”: An Idea Whose Time Has Come and Gone, Stonebraker and Çetintemel, ICDE 2005](https://pages.cs.wisc.edu/~shivaram/cs744-readings/fits_all.pdf)
+  Primary; read warehouse/architecture discussion. Motivates workload-specific designs; no historical benchmark is treated as a current product guarantee. Use for: Lesson 25.
+- [Paper: C-Store: A Column-oriented DBMS, Stonebraker et al., VLDB 2005](https://people.csail.mit.edu/tdanford/6830papers/stonebraker-cstore.pdf)
+  Primary; read layout and architecture sections. Compressed column projections and write/read components. Use for: Lessons 25, 26.
+- [Specification: Apache Parquet encodings](https://parquet.apache.org/docs/file-format/data-pages/encodings/)
+  Primary. Plain values, dictionary IDs, hybrid RLE/bit packing and delta encodings. The browser's intentionally simpler RLE is labeled separately. Use for: Lesson 26.
+- [Docs: DuckDB 1.4, Reading and Writing Parquet Files](https://duckdb.org/docs/1.4/data/parquet/overview)
+  Primary. Parquet projection/filter pushdown and metadata access. Versioned URL used because the unversioned URL returned a redirect placeholder in this session. Use for: Lesson 26.
+- [Paper: MonetDB/X100: Hyper-Pipelining Query Execution, Boncz, Zukowski and Nes, CIDR 2005](https://www.cidrdb.org/cidr2005/papers/P19.pdf)
+  Primary. Batch-oriented execution and tuple-at-a-time overhead. Browser batch dispatch counts do not claim to reproduce the paper's CPU measurements. Use for: Lesson 26.
+- [Manual: PostgreSQL 17, Materialized Views](https://www.postgresql.org/docs/17/rules-materializedviews.html)
+  Primary. Stored results and explicit refresh. PostgreSQL syntax is not claimed to work in MySQL. Use for: Lesson 27.
+- [Survey: Maintenance of Materialized Views: Problems, Techniques, and Applications, Gupta and Mumick, IEEE Data Engineering Bulletin, 1995](https://homepages.inf.ed.ac.uk/wenfei/qsx/reading/gupta95maintenance.pdf)
+  Primary. Definitions and maintenance taxonomy; introduction checked, not every algorithm reproduced. The PDF's extracted text is poor; search-rendered introduction was readable. Use for: Lesson 27.
+- [Paper: Data Cube: A Relational Aggregation Operator Generalizing Group-By, Cross-Tab, and Sub-Totals, Gray et al., 1997](https://www.cs.cmu.edu/~natassa/courses/15-721/papers/cube_op.pdf)
+  Primary. Grouping-set hierarchy, roll-up and cube. Example queries executed independently on DuckDB; MySQL WITH ROLLUP and GROUPING also executed. Use for: Lesson 27.
+- [Manual: MySQL 8.4, GROUP BY Modifiers](https://dev.mysql.com/doc/refman/8.4/en/group-by-modifiers.html)
+  Primary. WITH ROLLUP syntax and GROUPING to distinguish subtotal NULLs. Cross-checked by the committed MySQL output. Use for: Lesson 27.
+- Own experiments: `experiments/storage/indexes.sql`, `redis_persistence.py`, `analytics.py`, and the corresponding committed `results/` fixtures. These establish specific access counts, process-recovery outcomes, encoded sizes and query results; they do not establish production latency or power-failure durability.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -129,7 +163,9 @@ Verification status: entries below were located and checked via web search on 20
 ## Gaps
 
 - Module 3 follow-ups: RocksDB universal-compaction docs; the full Bigtable and LSM-tree papers; the English MySQL manual pages for index fill and the doublewrite buffer; Kafka's log segment and index layout (Lesson 22 points to it without verifying); MyRocks documentation; a primary source on SSD write amplification and sequential-vs-random cost for the hardware discussion that this module deliberately left unmeasured.
-- Sources still needed for Lessons 23 to 27: MySQL manual chapters on secondary, covering and composite indexes and the optimizer's index use; Redis persistence docs (RDB, AOF) and a research paper on main-memory databases (e.g. H-Store/VoltDB); Stonebraker et al. 'One Size Fits All' and a data-warehousing reference (Kimball/Inmon) for OLTP vs OLAP; C-Store (Stonebraker et al., VLDB 2005) and the Abadi et al. column-store survey; Parquet format docs; Gupta and Mumick on materialized views; a data cube paper (Gray et al.).
+- Module 3 optional deeper reading: H-Store/VoltDB main-memory architecture; Kimball/Inmon dimensional modeling; Abadi et al. column-store survey; Parquet page indexes and actual I/O tracing. Core sources for Lessons 23–27 are now verified above; real host/power-failure testing and production concurrency/latency benchmarks remain unperformed.
+
+- Module 4 sources still to verify fully before writing lessons: JSON number/duplicate-name interoperability (RFC 8259), XML Schema datatypes, CSV quoting (RFC 4180), Protobuf binary/JSON compatibility and unknown-field retention, Avro writer/reader schema resolution, registry transitive checks, rollback-safe deployment and retained-history replay. Some were opened during the initial 2026-11-22 Module 4 investigation, but no Module 4 lesson or mastery record was created after the learner redirected to Module 3.
 
 - Module 2 follow-ups: MySQL 8.4 LTS / 9.x behavior of the features used (JSON validation, multi-valued indexes, hash join, EXPLAIN ANALYZE); the DynamoDB adjacency-list and GSI pages; the full Stonebraker/Pavlo benchmark tables; the Neo4j/Cypher manual for the variable-length path syntax shown as a sketch; histogram statistics in MySQL (column statistics) for the correlated-predicates discussion; Mongo document size limit and MySQL's JSON size limit.
 

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>In-memory databases and durability · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 24</p>
+<h1>In-memory databases: when is a reply durable?</h1>
+<p class="lede">Memory can serve the reads while disk protects the writes. &ldquo;In memory&rdquo; tells you little about what survives a failure.</p>
+<div class="meta"><span>~30 min</span><span>1 crash lab</span><span>real Redis restarts</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Distinguish a process crash from loss of the host&rsquo;s volatile state, trace an acknowledgement through memory and persistence, and state a recovery promise with a failure model attached.</div>
+
+<h2>1. Four different places a write can be</h2>
+<pre><code>application memory → kernel write cache → durable storage
+        reply?              reply?             reply?
+
+recovery: load a snapshot, then replay a durable log suffix</code></pre>
+<p>InnoDB from <a href="0021-b-trees-pages-and-wal.html">Lesson 21</a> already uses memory aggressively. An engine designed around memory can choose data structures without making disk pages its main read unit. It can still use a log and snapshots for recovery. Neither a memory-resident dataset nor a successful reply proves durability.</p>
+<p>A process can die while the operating system keeps cached file writes alive. Losing the host&rsquo;s RAM also loses that cache. On Linux, <code>write()</code> and <code>fsync()</code> address different boundaries: successful fsync waits for modified file data and metadata to reach the storage device. File creation or replacement can require directory synchronization too.<sup class="c"><a href="#s2">[2]</a></sup> These promises still rely on the OS and storage honoring them. We do not test firmware or power-loss protection here.</p>
+
+<h2>2. Redis makes the trade visible</h2>
+<p>Redis documents two persistence mechanisms: <b>RDB</b> snapshots capture a dataset at a point in time; an <b>AOF</b> records mutations for replay. With both enabled, Redis uses the AOF on restart because it normally contains the more complete history.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<div class="table-scroll"><table><thead><tr><th>Choice</th><th>Recovery question</th><th>Cost or limit</th></tr></thead><tbody>
+<tr><td>No persistence</td><td>Can another authority rebuild it?</td><td>This process&rsquo;s memory is the only local copy.</td></tr>
+<tr><td>RDB snapshots</td><td>What was in the last completed snapshot?</td><td>Later acknowledged changes may disappear.</td></tr>
+<tr><td>AOF, everysec</td><td>What reached a completed synchronization?</td><td>Recent replies can precede durable storage.</td></tr>
+<tr><td>AOF, always</td><td>Was the append synchronized before the reply?</td><td>Synchronization lies on the reply path; batching can share its cost.</td></tr>
+<tr><td>AOF, no explicit fsync</td><td>What did the OS happen to flush?</td><td>The application has not established a per-write durable boundary.</td></tr>
+</tbody></table></div>
+<p>Everysec targets roughly a second of exposure under ordinary operation; it is not a real-time scheduling theorem. Slow storage and stalled synchronization matter. Snapshot intervals, fork overhead, copy-on-write memory, and AOF rewriting also belong in a capacity review. Persistence settings are a performance and failure trade, not a toggle labeled &ldquo;safe&rdquo;.</p>
+
+<h2>3. Crash at the acknowledgement boundary</h2>
+<p>At the default crash time below, five SETs have been acknowledged. A completed synchronization at 1,000 ms includes only the first three. Predict the recovered counter for a process-only crash, then for loss of the host&rsquo;s volatile state.</p>
+<div class="widget" id="sim-persistence"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> keep everysec selected and switch the failure. Then compare always with a snapshot. Move the crash across 2,000 ms. In this model an event at the crash time completes before the crash. All scheduled flushes and snapshots are idealized and instantaneous; the lab measures no latency.</p>
+
+<h2>4. What we actually crashed</h2>
+<p>The <a href="../experiments/storage/redis_persistence.py">reproduction script</a> used two disposable Redis containers. One started with AOF/everysec. The other started with AOF off and automatic snapshots disabled, then took an explicit <code>SAVE</code>. We sent <code>SIGKILL</code> to the Redis process and restarted the same container with its files intact.</p>
+<div class="table-scroll"><table><thead><tr><th>Before process kill</th><th>After restart</th></tr></thead><tbody>
+<tr><td>AOF/everysec: SET returns OK</td><td>The acknowledged value survived.</td></tr>
+<tr><td>RDB: SAVE snapshot-value; SET newer-acknowledged-value</td><td>snapshot-value returned; the later reply did not survive.</td></tr>
+</tbody></table></div>
+<p>The <a href="../experiments/storage/results/redis-persistence.json">recorded observations</a> establish those process-crash outcomes only. An AOF write can survive SIGKILL in the OS cache even before fsync. <b>We did not pull power or crash the kernel, so this is no evidence that everysec has zero host-failure loss.</b> Nor does one restart measure the largest possible loss window.</p>
+<div class="callout warn"><b class="t">A mistake the experiment caught</b>Changing appendonly at runtime did not change the container&rsquo;s startup command. Restarting brought AOF back on and loaded its older history instead of testing RDB alone. Separate startup configurations fixed the experiment. A recovery test must verify the configuration used after restart, not just before the crash.</div>
+
+<h2>5. Write the promise you need</h2>
+<p>For a recomputable cache, &ldquo;rebuild after process loss&rdquo; may be enough. For the only record of a payment, an acknowledged-write loss budget of zero demands a much stronger persistence and recovery design. Replication can add copies, but acknowledgement and common failure domains still matter; <a href="0006-faults-errors-failures.html">Lesson 6</a> already showed why copies are not automatically independent.</p>
+<p>Record four things: the failure being tolerated, the maximum acceptable loss of acknowledged data, how long recovery can take, and which authority can rebuild the state. Snapshot size and replay length affect recovery time even when no committed data is lost. Also separate <em>eviction</em>, a deliberate memory policy, from crash recovery. A durable engine can still intentionally expire or evict data under its configured rules.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0024"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"An everysec AOF value survives SIGKILL. What did that test establish?","options":["Power failures cannot lose writes","This process crash preserved it","Every reply followed completed fsync","Snapshots contain every acknowledged write"],"answer":1,"why":"The host and OS cache stayed alive. A process-only crash does not test the persistence boundary needed for loss of host RAM."},
+{"q":"At 1,950 ms, five SETs are acknowledged and three reached the last modeled fsync. How many survive host volatile-state loss with everysec?","options":["All five acknowledged SETs survive","None of those SETs survive","Only the last SET survives","The first three SETs survive"],"answer":3,"why":"The model's last completed synchronization is at 1,000 ms. The later two acknowledged writes are still volatile under this failure."},
+{"q":"What does changing an engine's dataset location to RAM imply about durability?","options":["Its persistence contract needs inspection","Its acknowledgements always imply persistence","Its snapshots always precede acknowledgements","Its replicas always survive together"],"answer":0,"why":"Read layout and durable acknowledgement are separate decisions. Memory-resident systems can log, snapshot, replicate, or do none of these."},
+{"q":"A snapshot takes one minute to load and its log suffix takes nine minutes to replay. What is the resulting recovery concern?","options":["The engine necessarily lost data","The log contains duplicate snapshots","Recovery time may exceed requirements","Every acknowledgement preceded the log"],"answer":2,"why":"Durability and recovery time are different objectives. A complete durable history may still take too long to restore service."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: write a recovery contract (15 minutes)</b></summary><p>Choose a cache or primary store. State its tolerated failure, acknowledged-data loss budget and recovery-time budget. Find the configured persistence mode and startup configuration. Design a scratch recovery drill that tests exactly that failure; name what it cannot establish.</p></details>
+<p>Ask the course agent if the acknowledgement or failure boundary is unclear; it is the central question of this lesson.</p>
+<h2>Sources and next reading</h2>
+<ol class="sources"><li id="s1">Primary: Redis, <a href="https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/">Persistence</a>. Read the AOF fsync policy and snapshot trade-offs first.</li><li id="s2">Primary API documentation: Linux man-pages, <a href="https://man7.org/linux/man-pages/man2/fsync.2.html">fsync(2)</a>. This describes Linux, not a universal hardware guarantee.</li><li>Own experiment: <a href="../experiments/storage/README.md">storage experiment notes</a> and raw JSON linked above. Browser policy timings are an illustrative model, not measurements of Redis scheduling.</li></ol>
+<div class="pager"><a href="0023-secondary-covering-and-composite-indexes.html">Lesson 23: Indexes</a><a href="0025-oltp-olap-and-warehouses.html">Lesson 25: OLTP and OLAP</a></div>
+<footer class="foot">Original course material, grounded in the public sources cited.</footer>
+</main><script src="../assets/sim-storage-extra.js"></script><script src="../assets/ui-storage-extra.js"></script></body></html>

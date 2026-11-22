@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Secondary, covering and composite indexes · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 23</p>
+<h1>Secondary, covering and composite indexes</h1>
+<p class="lede">An index can find the right rows and still do far too much work. Separate the entries it searches, the rows it fetches, and the values it returns.</p>
+<div class="meta"><span>~35 min</span><span>1 interactive</span><span>real MySQL plans</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Design one composite index for a concrete query, explain why column order matters, recognize a covering access path, and use actual plan rows to check the mechanism.</div>
+
+<h2>1. A secondary lookup can be two tree walks</h2>
+<p><a href="0021-b-trees-pages-and-wal.html">Lesson 21</a> followed a key down one B-tree. In InnoDB, the primary-key tree holds the row. A secondary index holds its own key columns <em>and the row&rsquo;s primary key</em>. Finding a secondary entry can therefore be followed by a primary-key lookup to obtain the rest of the row. A wide primary key also makes every secondary index wider.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<pre><code>secondary leaf: (tenant=42, status=paid, date=90, primary_key=42091)
+                                  |
+                                  v
+clustered leaf: (id=42091, tenant=42, status=paid, date=90, amount=..., payload=...)</code></pre>
+<p>Cached pages make these logical steps cheaper; they do not erase the access path. The unit in this lesson is <b>entries or records examined</b>, not physical disk reads.</p>
+
+<h2>2. Design for this query</h2>
+<pre><code class="sql">SELECT SUM(amount) FROM orders
+WHERE tenant_id = 42 AND status = 'paid' AND created_at &gt;= 90;</code></pre>
+<p>Dates are integer buckets in this small experiment. There are 100,000 orders, 1,000 for this tenant, 200 paid, and 20 matching all predicates. A composite B-tree is ordered lexicographically: first column, then the next within each equal first value. Equality on tenant and status followed by a date range makes the twenty matching entries one contiguous interval. That suggests <code>(tenant_id, status, created_at)</code>. Its leftmost prefixes also support tenant-only and tenant-plus-status lookups.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<p>With <code>(tenant_id, created_at, status)</code>, dates 91 through 99 each contain both statuses. Paid entries across those dates do not form one narrow interval. My initial prediction was 100 entries. <b>Real MySQL scanned 92.</b> It tightened the lower boundary to <code>(42,90,'paid')</code>, skipping the eight open entries at date 90. Later columns can help at a boundary without eliminating unwanted entries in the interior. &ldquo;Nothing after a range matters&rdquo; is too strong.</p>
+
+<div class="widget" id="sim-indexes"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> start at date 90 with pushdown off. Compare the first three indexes. Then choose the covering index. Predict what will change before enabling pushdown on the date-first index.</p>
+
+<h2>3. What the real plans show</h2>
+<p>These are from an isolated <b>MySQL 8.4.13</b>, using <code>FORCE INDEX</code> to expose each path and disabling index condition pushdown initially. All return the same sum, <b>11,410</b>. The full SQL and raw plans are in <a href="../experiments/storage/indexes.sql">indexes.sql</a> and <a href="../experiments/storage/results/indexes-mysql84.txt">the recorded output</a>.</p>
+<div class="table-scroll"><table><thead><tr><th>Forced index</th><th>Access node actual rows</th><th>After filtering</th></tr></thead><tbody>
+<tr><td>tenant only</td><td>1,000</td><td>20</td></tr>
+<tr><td>tenant, date, status</td><td>92</td><td>20</td></tr>
+<tr><td>tenant, status, date</td><td>20</td><td>20</td></tr>
+<tr><td>tenant, status, date, amount</td><td>20; covering range scan</td><td>20</td></tr>
+</tbody></table></div>
+<pre><code>Aggregate: sum(orders.amount)
+  Filter: ...                         actual rows=20 loops=1
+    Index lookup using tenant_only    actual rows=1000 loops=1
+
+Aggregate: sum(orders.amount)
+  Filter: ...                         actual rows=20 loops=1
+    Covering index range scan         actual rows=20 loops=1</code></pre>
+<p>Read plans from the leaves upward. Compare estimates with actual rows, then consider loops: a small inner lookup repeated 100,000 times is substantial work. <code>EXPLAIN ANALYZE</code> executes the query; plain <code>EXPLAIN</code> estimates it. The displayed times here are warm, tiny-run observations, not a benchmark.<sup class="c"><a href="#s3">[3]</a></sup></p>
+
+<h2>4. Covering and pushdown save different work</h2>
+<p><b>Covering</b> means all values this query needs are in the chosen index. Adding amount to the good-order index lets the engine compute the sum from its entries. The recorded plan says <code>Covering index range scan</code>; traditional EXPLAIN says <code>Using index</code>. Selecting the payload would remove coverage. InnoDB visibility checks can still require clustered records in some transactional circumstances; the simulator omits MVCC.</p>
+<p><b>Index condition pushdown (ICP)</b> tests predicates available in a secondary entry before fetching its clustered row.<sup class="c"><a href="#s4">[4]</a></sup> On our date-first index, it tests status inside the engine and returns only twenty rows from the access node. The 92-entry search interval remains. <code>Using index condition</code> does not mean the query is covered. Turning pushdown on can hide rejected entries from that actual-row counter; it does not prove they were never inspected.</p>
+
+<h2>5. An index is a maintained copy</h2>
+<p>Covering costs space and write work. Inserting an order maintains every index; updating an indexed amount must maintain the covering index too. Wider entries reduce entries per page, increasing the tree and cache footprint. The useful review question is: which measured read does this copy save, and what write workload maintains it?</p>
+<p>Equality columns before a range are a starting point for this query, not a universal rule. ORDER BY, LIMIT, other queries, skew, and selectivity can change the choice. The lab forces paths; it does not predict the optimizer&rsquo;s free choice, skip scans, Index Merge, page reads, or latency.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0023"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"A query needs amount, but its secondary index contains only tenant, status, date and the primary key. What extra work may follow?","options":["Read another tree for amount","Sort every record by amount","Rewrite every matching index entry","Scan every tenant before returning"],"answer":0,"why":"The secondary entry supplies the primary key; InnoDB can use that key to fetch amount from the clustered tree."},
+{"q":"The good-order and covering indexes each scan twenty entries. What does covering save in this model?","options":["Every predicate on the index","The twenty matching result values","Clustered fetches for those entries","The index maintenance during writes"],"answer":2,"why":"Both find the same interval. Adding amount makes the sum computable from the secondary entries, saving modeled clustered fetches."},
+{"q":"MySQL shows Using index condition on the date-first index. What can you conclude?","options":["All predicates narrowed the interval","Every value is index covered","No clustered records are fetched","Some predicates run before fetching"],"answer":3,"why":"ICP evaluates predicates from secondary entries before fetching full rows. Coverage and the width of the search interval are separate questions."},
+{"q":"Why did the date-first index scan 92 rather than 100 entries?","options":["The cache deleted eight records","Status tightened one range boundary","MySQL changed the requested result","Covering removed eight result columns"],"answer":1,"why":"The lower boundary includes status at date 90, excluding eight open entries there. Other dates still contain unwanted open entries."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: audit one index (20 minutes)</b></summary><p>On a scratch database, use the experiment script as a template. Predict the contiguous interval, the columns needed, and the residual predicate. Compare actual rows with ICP off and on. Explain the read saved by each extra indexed column before proposing it.</p></details>
+<p>Ask the course agent about any confusing plan node; include the query, index definition, and actual plan.</p>
+<h2>Sources and next reading</h2>
+<ol class="sources">
+<li id="s1">Primary: MySQL 8.4 manual, <a href="https://dev.mysql.com/doc/refman/8.4/en/innodb-index-types.html">Clustered and Secondary Indexes</a>. Start here.</li>
+<li id="s2">Primary: MySQL 8.4 manual, <a href="https://dev.mysql.com/doc/refman/8.4/en/multiple-column-indexes.html">Multiple-Column Indexes</a>.</li>
+<li id="s3">Primary: MySQL 8.4 manual, <a href="https://dev.mysql.com/doc/refman/8.4/en/using-explain.html">Optimizing Queries with EXPLAIN</a>.</li>
+<li id="s4">Primary: MySQL 8.4 manual, <a href="https://dev.mysql.com/doc/refman/8.4/en/index-condition-pushdown-optimization.html">Index Condition Pushdown</a>. Counts and the 92-entry observation: this course&rsquo;s reproducible experiment, not figures from the manual.</li>
+</ol>
+<div class="pager"><a href="0022-btree-vs-lsm.html">Lesson 22: B-tree or LSM?</a><a href="0024-in-memory-databases-and-durability.html">Lesson 24: Memory and durability</a></div>
+<footer class="foot">Original course material, grounded in the public sources cited.</footer>
+</main><script src="../assets/sim-storage-extra.js"></script><script src="../assets/ui-storage-extra.js"></script></body></html>

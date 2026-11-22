@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>OLTP, OLAP and warehouses · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 25</p>
+<h1>OLTP, OLAP, and why warehouses are separate</h1>
+<p class="lede">&ldquo;Read-heavy&rdquo; is not a workload description. Fetching one order and summing a year of orders both read data; almost everything else about them differs.</p>
+<div class="meta"><span>~30 min</span><span>1 contention lab</span><span>workload design</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Describe a transactional and analytical workload using rows, columns, deadlines and freshness; choose what to isolate; and define the grain of a warehouse fact table without accidentally double-counting revenue.</div>
+
+<h2>1. Describe the work before choosing the engine</h2>
+<div class="table-scroll"><table><thead><tr><th>Property</th><th>Checkout or order lookup</th><th>Revenue report</th></tr></thead><tbody>
+<tr><td>Rows touched</td><td>A few identified rows</td><td>Millions selected by a broad interval</td></tr>
+<tr><td>Columns needed</td><td>Often much of each order</td><td>Date, amount, region; little else</td></tr>
+<tr><td>Writes</td><td>Small concurrent changes, business invariants</td><td>Often ingestion plus large reads</td></tr>
+<tr><td>Deadline</td><td>Customer-facing tail-latency objective</td><td>Completion time and aggregate throughput</td></tr>
+<tr><td>Freshness</td><td>Must see the state needed to confirm this action</td><td>Possibly tolerates a stated delay</td></tr>
+</tbody></table></div>
+<p>Online transaction processing (<b>OLTP</b>) and online analytical processing (<b>OLAP</b>) name these workload families. Both can use SQL and relational models. &ldquo;One Size Fits All&rdquo; argues that different workloads justify different engine designs; it is an architectural argument, not proof that every application needs two databases.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>From <a href="0023-secondary-covering-and-composite-indexes.html">Lesson 23</a>, a covering index can make a particular report cheaper. It still reads every relevant entry. Ten million amount values remain ten million amount values unless another structure has already aggregated them.</p>
+
+<h2>2. A low average load can still hurt checkout</h2>
+<p>The model below has 200 one-millisecond checkouts each second. Add one 200-millisecond report: total requested work is only about 40% of one resource. Yet checkouts arriving behind the report wait. Predict whether average utilization alone protects the checkout deadline.</p>
+<div class="widget" id="sim-workloads"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> compare 0, 200 and 1,000 ms of report work, then give reports a separate resource. This is <a href="0009-queueing-and-the-cliff.html">Lesson 9&rsquo;s queueing</a> applied to a workload mix. The FIFO model runs exactly ten seconds, including its startup and final backlog; its percentiles are for that finite trace, not steady-state database predictions.</p>
+<p>The model has no locks, buffer pool, parallel execution or disks. Real reports can also consume memory bandwidth, displace hot pages, use connections, and compete for I/O. Those are hypotheses to measure. Moving a report to another process on the same saturated device may not isolate the resource that matters.</p>
+
+<h2>3. A warehouse buys a different read layout</h2>
+<pre><code>MySQL authority → snapshot + ordered changes → analytical store → report
+      |                       |                       |
+   checkout             ingestion position      report as-of point</code></pre>
+<p>This is a design sketch, not a configured CDC recipe. The analytical copy can have another physical layout, different retention, and resources sized for scans. C-Store is a primary example of a read-optimized architecture: it combines compressed column-oriented projections with a write-oriented component, because arriving changes and large reads want different layouts.<sup class="c"><a href="#s2">[2]</a></sup> <a href="0026-column-storage-compression-and-vectors.html">The next lesson</a> measures the column side.</p>
+<p>The copy also creates obligations. An initial snapshot and its change stream must join at a consistent boundary without gaps or unintended duplicates. Lag needs a measurable position or as-of point. Reprocessing and schema changes need a plan. A report that completed at 12:00 can still describe data only through 11:40.</p>
+<div class="callout"><b class="t">Specify freshness as part of correctness</b>For a daily trend, data through the previous hour may be acceptable. An inventory reservation must consult the authority enforcing inventory, or another mechanism with an explicit correctness guarantee. A recent-looking warehouse timestamp does not prove that every relevant transaction has arrived.</div>
+<p>A read replica can be an intermediate option when its layout and queries are adequate. It still needs capacity and a lag contract. This lesson does not configure MySQL replication or assume a particular consistency guarantee; those belong to Module 5.</p>
+
+<h2>4. The first warehouse decision is the grain</h2>
+<p>Say exactly what one fact row represents. For a sales model, choose <b>one order line at purchase time</b>. Its measures might be quantity and line revenue in integer minor units; its dimension keys might identify purchase date, product and customer region. A star schema places the fact table at the center and descriptive dimension tables around it. Here is our example, not a universal schema:</p>
+<pre><code>sales_line(order_id, line_no, purchased_day, product_key, region_key,
+           quantity, line_revenue_minor)
+product(product_key, category, ...)
+region(region_key, name, ...)</code></pre>
+<p>Two concrete traps follow from ignoring that sentence:</p>
+<ul>
+<li><b>Grain mismatch:</b> copying a 1,000-unit order total into each of three order-line rows makes SUM report 3,000. Store a line measure or keep order totals at their own grain.</li>
+<li><b>History mismatch:</b> joining old sales to today&rsquo;s product price recomputes history at today&rsquo;s price. Capture the purchase amount. If region changes, decide whether the report means region at purchase or current region; those are different questions.</li>
+</ul>
+<p>Also name the currency and refund convention before adding money. SUM across USD and EUR is arithmetic without a coherent business meaning. These modeling choices survive any engine migration.</p>
+
+<h2>5. A decision you can defend</h2>
+<ol><li>Measure rows examined, columns read and tail latency for both workloads.</li><li>Try a suitable index and schedule or limit broad queries if those satisfy the requirements.</li><li>If resource competition or layout remains the bottleneck, isolate the identified resource.</li><li>If a second store is justified, define ingestion, freshness, reconciliation and the authority for decisions.</li></ol>
+<p>Isolation trades contention for operating another dataflow. The choice is supported when both sides of that trade have a measured requirement.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0025"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"Both workloads are read-heavy. Which distinction helps choose a storage layout?","options":["Whether their names contain SQL","Whether their owners prefer databases","Rows touched and columns needed","How many dashboards display results"],"answer":2,"why":"Point lookups and broad narrow-column scans benefit from different layouts even though both are reads."},
+{"q":"A report queues ahead of checkout at 40% average resource utilization. What can happen?","options":["Checkout waits despite spare capacity","Checkout necessarily meets every deadline","The report automatically yields instantly","Average utilization guarantees low tails"],"answer":0,"why":"A non-preemptive report can occupy the resource for a long interval. Average spare capacity does not bound individual waits."},
+{"q":"One order has three lines and total revenue 1,000. Each line stores that order total. What does SUM produce?","options":["Exactly 1,000 with automatic deduplication","Exactly 1,000 after sorting rows","Exactly zero without a dimension","Exactly 3,000 through repeated totals"],"answer":3,"why":"The stored measure has order grain but is repeated at line grain. Define the fact grain and store a measure that belongs to it."},
+{"q":"A warehouse report finishes now but ingestion is twenty minutes behind. What should its contract expose?","options":["Only the current wall-clock time","The data completeness as-of point","Only the query execution duration","The number of server processes"],"answer":1,"why":"Query completion time is not data freshness. The report needs a meaningful completeness boundary for its inputs."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: write a two-workload brief (20 minutes)</b></summary><p>Pick a customer request and one report. State rows, columns, write pattern, deadline and freshness for each. Name their shared bottleneck, one proposed isolation boundary, and the ongoing cost of the copy. Define the fact grain in one sentence.</p></details>
+<p>Ask the course agent to challenge your workload description or grain; both are easier to fix before building the pipeline.</p>
+<h2>Sources and next reading</h2>
+<ol class="sources"><li id="s1">Primary: Stonebraker and Çetintemel, <a href="https://pages.cs.wisc.edu/~shivaram/cs744-readings/fits_all.pdf">“One Size Fits All”: An Idea Whose Time Has Come and Gone</a>, ICDE 2005. Read its warehouse discussion.</li><li id="s2">Primary: Stonebraker et al., <a href="https://people.csail.mit.edu/tdanford/6830papers/stonebraker-cstore.pdf">C-Store: A Column-oriented DBMS</a>, VLDB 2005. Workload table, contention trace and sales examples here are this course&rsquo;s synthesis; no historical paper benchmark is presented as a current product result.</li></ol>
+<div class="pager"><a href="0024-in-memory-databases-and-durability.html">Lesson 24: Memory and durability</a><a href="0026-column-storage-compression-and-vectors.html">Lesson 26: Columns and vectors</a></div>
+<footer class="foot">Original course material, grounded in the public sources cited.</footer>
+</main><script src="../assets/sim-storage-extra.js"></script><script src="../assets/ui-storage-extra.js"></script></body></html>

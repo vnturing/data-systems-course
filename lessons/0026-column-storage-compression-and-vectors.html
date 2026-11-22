@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Column storage, compression and vectors · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-3-checklist.html">Module 3 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main>
+<p class="kicker">Module 3 · Lesson 26</p>
+<h1>Column storage, compression and vectorized execution</h1>
+<p class="lede">Read fewer columns. Skip irrelevant groups. Encode repeated values. Process values in batches. These are four separate mechanisms; measure them separately.</p>
+<div class="meta"><span>~40 min</span><span>2 linked interactives</span><span>real Parquet files</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Explain each source of scan savings, distinguish physical layout from execution strategy, and interpret file metadata without mistaking it for measured I/O or query speed.</div>
+
+<h2>1. Row layout and column layout answer different reads</h2>
+<pre><code>row layout:    [id, day, region, amount, payload...] [id, day, region, amount, payload...]
+column layout: [id, id, ...] [day, day, ...] [region, region, ...] [amount, amount, ...]</code></pre>
+<p>A scan summing amount for recent dates needs day and amount. With separate columns, it can leave unrelated payload behind. C-Store describes column-oriented projections and compact encodings as parts of a read-optimized design.<sup class="c"><a href="#s1">[1]</a></sup> A row lookup needing all twelve columns has a different access pattern: assembling values across columns can add work. Column layout does not repeal <a href="0025-oltp-olap-and-warehouses.html">the workload trade-off</a>.</p>
+
+<h2>2. Group pruning depends on order</h2>
+<p>A columnar file can store minimum and maximum values per group. If a group&rsquo;s maximum date is below the query&rsquo;s lower date bound, it cannot match. If recent dates are scattered across every group, the same predicate excludes none. DuckDB documents projection and filter pushdown for Parquet scans.<sup class="c"><a href="#s4">[4]</a></sup> Projection and group pruning multiply savings only when both apply.</p>
+<div class="widget" id="sim-columns"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> increase needed columns from two to twelve, then unsort the filter column. Keep those settings while changing the batch size. Bytes should stay fixed when only the batch changes. Finally, switch the encoding order: repeated values are not necessarily long runs.</p>
+
+<h2>3. What real Parquet files show</h2>
+<p>The <a href="../experiments/storage/analytics.py">experiment</a> writes 200,000 rows, twelve columns and twenty 10,000-row groups with PyArrow 22.0.0. Eight columns contain hash-derived payload strings. Both files contain the same rows; one is sorted by day, the other shuffled with seed 42. DuckDB 1.4.2 runs:</p>
+<pre><code>SELECT COUNT(*), SUM(amount)
+FROM read_parquet('sorted.parquet') WHERE day &gt;= 95;</code></pre>
+<p>Both return <b>10,000 rows and sum 5,982,595</b>. Their metadata reports:</p>
+<div class="table-scroll"><table><thead><tr><th>Compressed column-chunk bytes</th><th>Sorted</th><th>Shuffled</th></tr></thead><tbody>
+<tr><td>All columns, all groups</td><td>57,962,312</td><td>58,765,622</td></tr>
+<tr><td>Day and amount, all groups</td><td>129,149</td><td>466,852</td></tr>
+<tr><td>Day and amount in groups not ruled out</td><td>6,411 (1 group)</td><td>466,852 (20 groups)</td></tr>
+</tbody></table></div>
+<p>These are <b>sums of recorded compressed chunk sizes</b>, excluding file metadata. The last row is the size of eligible chunks calculated from min/max statistics. It is not a disk-read trace: filesystem caching, metadata requests, page-level decisions and reader behavior can change actual I/O. We verify query results and preserve <a href="../experiments/storage/results/analytics.json">the raw metadata results</a>; we make no latency comparison with MySQL.</p>
+
+<h2>4. Dictionary encoding, runs and compression</h2>
+<p>A dictionary replaces repeated values with small IDs. Bit packing stores those IDs in the bits their range requires. Run-length encoding represents repeated adjacent values with a value and a count. Delta encoding represents differences between successive values. Parquet specifies these encodings, including a hybrid of run-length and bit-packed dictionary IDs; general compression such as Zstandard is a separate layer.<sup class="c"><a href="#s2">[2]</a></sup></p>
+<p>We isolated one 200,000-value INT32 status column with four equally frequent values. With no general compression, plain Parquet used <b>800,061 bytes</b> in its column chunk. Dictionary encoding used <b>104 bytes sorted into four runs</b>, or <b>50,490 bytes shuffled</b>. Enabling Zstandard on the tiny sorted dictionary chunk increased it to 122 bytes: codec framing can cost more than it saves. These are measured chunk sizes, including encoding/page overhead, not the toy encoding&rsquo;s formulas.</p>
+<p>The toy intentionally uses a simpler RLE: a one-byte ID and four-byte count per run. Alternating values make that larger than plain INT32. Real hybrid encoders can choose packed runs instead. Never transfer the toy&rsquo;s byte counts to Parquet.</p>
+
+<h2>5. Vectorized execution is another axis</h2>
+<p>A tuple-at-a-time executor repeatedly calls operators for individual rows. A vectorized executor passes batches of values, amortizing dispatch and exposing tight loops. MonetDB/X100 develops this execution strategy and examines its CPU effects.<sup class="c"><a href="#s3">[3]</a></sup> The widget counts only batch dispatches: 10,000 values in batches of 2,048 need five batches. That does not imply a 2,000-fold speedup; arithmetic, decoding and memory access still happen.</p>
+<p><b>Vectorized execution is not synonymous with SIMD.</b> SIMD means one CPU instruction acts on multiple lanes. A batch loop may use SIMD, scalar instructions, or a mix. Conversely a row-oriented engine can batch some operations. Layout, encoding and execution strategy are separable decisions.</p>
+<p>A filter can produce positions or a selection mask; later operators can process only those positions rather than reconstructing complete rows immediately. This avoids hauling payload through a pipeline that only needs a sum. Point updates, concurrent visibility and maintaining sorted groups still cost work; this lesson models none of them.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0026"></div>
+<script type="application/json" id="quiz-data">[
+{"q":"A query needs two of twelve columns. What directly makes projection useful?","options":["All values share one dictionary","Every row becomes a transaction","Each batch runs one instruction","Unneeded columns can remain unread"],"answer":3,"why":"Column layout separates the needed values from unrelated payload. This saving does not require sorting or a dictionary."},
+{"q":"The same dates are scattered across every row group. What can happen to min/max pruning?","options":["All groups become equally compressed","Every group overlaps the predicate","The query returns different totals","Each group loses its metadata"],"answer":1,"why":"Each group's range can include recent dates, leaving no group that min/max can rule out. Sorting can change this without changing the rows."},
+{"q":"Increasing batch size reduces dispatch count in the lab. What has been measured?","options":["Every instruction executed by DuckDB","Disk bytes read by MySQL","Only the model's batch dispatches","The engine's production latency improvement"],"answer":2,"why":"Batch-call arithmetic isolates dispatch amortization. It does not measure instructions, disk reads or latency."},
+{"q":"Why can dictionary encoding shrink a shuffled low-cardinality column without long runs?","options":["Small IDs replace repeated values","All values become equally ordered","Each row loses its identity","Compression removes the query predicate"],"answer":0,"why":"The dictionary plus packed IDs exploits few distinct values. RLE additionally needs adjacent repetitions, which is a separate property."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: explain one scan (20 minutes)</b></summary><p>For a report, list its required columns, filter column order, expected group overlap, distinct-value counts and execution strategy. Reproduce the files on a scratch machine. If reporting I/O or latency, add actual instrumentation rather than relabeling metadata bytes.</p></details>
+<p>Ask the course agent to separate any confusing performance claim into projection, pruning, encoding and execution.</p>
+<h2>Sources and next reading</h2>
+<ol class="sources"><li id="s1">Primary: Stonebraker et al., <a href="https://people.csail.mit.edu/tdanford/6830papers/stonebraker-cstore.pdf">C-Store</a>, VLDB 2005. Read the storage-layout discussion.</li><li id="s2">Primary specification: Apache Parquet, <a href="https://parquet.apache.org/docs/file-format/data-pages/encodings/">Encodings</a>.</li><li id="s3">Primary: Boncz, Zukowski and Nes, <a href="https://www.cidrdb.org/cidr2005/papers/P19.pdf">MonetDB/X100: Hyper-Pipelining Query Execution</a>, CIDR 2005. Its historical benchmarks are not measurements of our lab.</li><li>Own measurements: analytics.py and results/analytics.json linked above. The browser uses explicit fixed-width formulas and toy encodings; it is not a Parquet reader or a CPU benchmark.</li><li id="s4">Primary: DuckDB 1.4 documentation, <a href="https://duckdb.org/docs/1.4/data/parquet/overview">Reading and Writing Parquet Files</a>, including projection/filter pushdown.</li></ol>
+<div class="pager"><a href="0025-oltp-olap-and-warehouses.html">Lesson 25: OLTP and OLAP</a><a href="0027-materialized-views-and-data-cubes.html">Lesson 27: Views and cubes</a></div>
+<footer class="foot">Original course material, grounded in the public sources cited.</footer>
+</main><script src="../assets/sim-storage-extra.js"></script><script src="../assets/ui-storage-extra.js"></script></body></html>

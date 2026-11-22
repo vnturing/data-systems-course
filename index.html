@@ -47,15 +47,20 @@
 <p><span data-lesson-id="0017"></span><a href="lessons/0017-lab-model-one-workload.html"><b>17 &middot; Lab: one workload, three models</b></a> &mdash; <span style="color:var(--muted)">the workload picks the design.</span></p>
 <p>Reference sheet: <a href="reference/module-2-checklist.html">Module 2 rules and numbers</a>. Reproduce every measurement with <code>experiments/mysql/</code>.</p>
 
-<h2>Module 3 · Storage engines and indexes (5 of 10 lessons so far)</h2>
+<h2>Module 3 · Storage engines and indexes (10 lessons)</h2>
 <p><span data-lesson-id="0018"></span><a href="lessons/0018-log-and-hash-index.html"><b>18 &middot; The simplest database</b></a> &mdash; <span style="color:var(--muted)">an append-only log and a hash index, with real crash recovery.</span></p>
 <p><span data-lesson-id="0019"></span><a href="lessons/0019-lsm-trees.html"><b>19 &middot; LSM-trees</b></a> &mdash; <span style="color:var(--muted)">a miniature calibrated against real RocksDB.</span></p>
 <p><span data-lesson-id="0020"></span><a href="lessons/0020-compaction-and-amplification.html"><b>20 &middot; Compaction and amplification</b></a> &mdash; <span style="color:var(--muted)">write, space and read cost; bloom filters.</span></p>
 <p><span data-lesson-id="0021"></span><a href="lessons/0021-b-trees-pages-and-wal.html"><b>21 &middot; B-trees, pages and the log</b></a> &mdash; <span style="color:var(--muted)">real InnoDB measurements and a crash-point drill.</span></p>
 <p><span data-lesson-id="0022"></span><a href="lessons/0022-btree-vs-lsm.html"><b>22 &middot; B-tree or LSM?</b></a> &mdash; <span style="color:var(--muted)">same workload, three engines.</span></p>
+<p><span data-lesson-id="0023"></span><a href="lessons/0023-secondary-covering-and-composite-indexes.html"><b>23 &middot; Secondary, covering and composite indexes</b></a> &mdash; <span style="color:var(--muted)">real MySQL plans; search ranges, fetches and pushdown.</span></p>
+<p><span data-lesson-id="0024"></span><a href="lessons/0024-in-memory-databases-and-durability.html"><b>24 &middot; In-memory databases and durability</b></a> &mdash; <span style="color:var(--muted)">acknowledgement boundaries and real Redis process crashes.</span></p>
+<p><span data-lesson-id="0025"></span><a href="lessons/0025-oltp-olap-and-warehouses.html"><b>25 &middot; OLTP, OLAP and warehouses</b></a> &mdash; <span style="color:var(--muted)">contention, freshness and the grain of a fact table.</span></p>
+<p><span data-lesson-id="0026"></span><a href="lessons/0026-column-storage-compression-and-vectors.html"><b>26 &middot; Columns, compression and vectors</b></a> &mdash; <span style="color:var(--muted)">projection, pruning, encoding and batches; real Parquet files.</span></p>
+<p><span data-lesson-id="0027"></span><a href="lessons/0027-materialized-views-and-data-cubes.html"><b>27 &middot; Materialized views and data cubes</b></a> &mdash; <span style="color:var(--muted)">updates, deletes, replay and rolling up sufficient state.</span></p>
 <p>Reference sheet: <a href="reference/module-3-checklist.html">Module 3 structures and numbers</a>. Reproduce the measurements with <code>experiments/storage/</code>.</p>
 
-<p>The <a href="syllabus.html">full syllabus</a> shows the rest of Module 3 and the 9 modules after it.</p>
+<p>The <a href="syllabus.html">full syllabus</a> shows the 9 modules ahead, starting with Module 4: encoding and evolution.</p>
 
 <h2>Who it's for</h2>
 <p>Developers comfortable with SQL, services and production systems who are new to the distributed-systems side. If you've ever been surprised by a duplicate message, a stale read, or a failover that lost writes, this is for you.</p>

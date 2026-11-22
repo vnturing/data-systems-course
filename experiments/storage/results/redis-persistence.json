@@ -1,0 +1,7 @@
+{
+  "version": "redis_version:7.4.12",
+  "crash": "SIGKILL Redis process; host and OS cache alive",
+  "aof_everysec_after_restart": "acknowledged",
+  "rdb_after_restart": "snapshot-value",
+  "not_tested": "Power loss, host kernel crash, storage firmware, replication or loss-window upper bounds"
+}

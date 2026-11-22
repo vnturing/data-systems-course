@@ -49,6 +49,12 @@
 - 0021 B-trees, pages and the WAL (real InnoDB: height, fill, 141x..5.4x pool curve; split crash drill with/without WAL and doublewrite)
 - 0022 B-tree vs LSM (same workload, three engines; explicit list of what was not measured)
 - reference/module-3-checklist.html; experiments/storage/ (measurements.json is the single source of truth for model tests)
+- 0023 secondary/covering/composite indexes (real MySQL 8.4.13: 1,000 vs 92 vs 20 access rows; covering vs ICP)
+- 0024 in-memory databases and durability (crash-scope drill, real Redis 7.4.12 AOF and RDB process restarts)
+- 0025 OLTP vs OLAP (finite FIFO contention lab, warehouse freshness, fact grain)
+- 0026 columns, compression and vectors (real PyArrow 22.0.0/Parquet and DuckDB 1.4.2; sorted 1 of 20 eligible row groups vs shuffled 20)
+- 0027 materialized views and cubes (before/after deltas, duplicate delivery and atomic marker crash; real DuckDB and MySQL roll-ups)
+- Module 3 complete: lessons 18–27; checklist, home and syllabus updated. New measurements are in experiments/storage/results/ and are checked by tools/test-storage-extra.js.
 
 ## Measurement lessons from Module 3 (apply to every future module)
 - A scrambled sequence (n*2654435761 mod 2^32) is NOT a random key source; it silently distorted the first B-tree numbers (76% fill / 223x became 66% / 141x). A model that shares the flaw will agree with a flawed experiment, so agreement is weak evidence.
@@ -60,6 +66,13 @@
 A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Module 3 also used real RocksDB through `pip install rocksdict` and read InnoDB page headers straight from the .ibd file. Background processes do not survive between tool calls, so start MySQL in the same command as the experiment.
 
 ## Next up
-1. Module 3, second half (Lessons 23 to 27): secondary/covering/composite indexes with EXPLAIN on the real MySQL; in-memory databases and durability (Redis persistence modes, real fsync behavior); OLTP vs OLAP; column storage, compression, vectorized execution (can be measured with Parquet/DuckDB if pip-installable and with MySQL for the row-store side); materialized views and data cubes. Sources first (see RESOURCES.md Gaps).
-2. Then Module 4 (encoding and evolution).
-3. Lessons learned this patch: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. Three times across the last two patches (jitter, Kafka disk loss, fan-out) the fix was a better experiment, not a tuned parameter.
+1. Module 4 (encoding and evolution), Lessons 28–32. The learner redirected the 2026-11-22 session to finish Module 3 first; Module 4 remains planned. Do not require another learning assessment before delivering the planned lessons.
+2. Lessons learned: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. MySQL's range boundary used the column after the range (92 entries, not 100); Redis restart settings differed from runtime settings; tiny compressed chunks grew with codec overhead. Preserve those observations.
+3. New experiment environment: macOS host, Linux/arm64 Docker containers, isolated Python 3.14 venv. The older sandbox notes above describe historical experiments, not requirements for the current machine. Temporary containers have no published ports and are removed after verification. Do not connect experiments to the learner's existing servers.
+
+## Measurement lessons from Module 3, second half
+- Report access-node output rows with ICP state attached. ICP can hide rejected entries from that node's output count.
+- A SIGKILL test leaves OS cache alive. It cannot establish host/power-loss durability or a worst-case loss window.
+- Parquet column-chunk metadata provides encoded sizes and group eligibility, not actual device read counts. Sorted and shuffled layouts also compress differently.
+- Batch dispatch counts do not measure CPU instructions, SIMD usage or latency.
+- Keep all teaching models explicitly limited; real engine results live in committed fixtures, with reproduction scripts.
