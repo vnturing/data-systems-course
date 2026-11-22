@@ -55,6 +55,12 @@
 - 0026 columns, compression and vectors (real PyArrow 22.0.0/Parquet and DuckDB 1.4.2; sorted 1 of 20 eligible row groups vs shuffled 20)
 - 0027 materialized views and cubes (before/after deltas, duplicate delivery and atomic marker crash; real DuckDB and MySQL roll-ups)
 - Module 3 complete: lessons 18–27; checklist, home and syllabus updated. New measurements are in experiments/storage/results/ and are checked by tools/test-storage-extra.js.
+- 0028 JSON/XML/CSV boundary contracts (actual browser JSON parsing, UTF-8/Base64 explorer, independent Python JSON/CSV results)
+- 0029 schema-based binary formats (real Protobuf/Avro bytes; 70 independent library samples, explicit scalar presence)
+- 0030 compatibility and rolling upgrades (role-deployment lab, retained history and rollback)
+- 0031 database/service/broker dataflow (new→old updater→new; real binary preservation vs rebuilding/JSON loss)
+- 0032 three-version migration workbook (nine pairs, removed-default replay trap, cents/dollars semantic assertions)
+- Module 4 complete: lessons 28–32; reference/module-4-checklist.html, navigation, sources and experiments/encoding/ added. tools/test-encoding.js checks 70 wire fixtures, 54 Avro outcomes, intermediary round trips and migration invariants. Full checks and browser QA passed at 320px and 390px.
 
 ## Measurement lessons from Module 3 (apply to every future module)
 - A scrambled sequence (n*2654435761 mod 2^32) is NOT a random key source; it silently distorted the first B-tree numbers (76% fill / 223x became 66% / 141x). A model that shares the flaw will agree with a flawed experiment, so agreement is weak evidence.
@@ -66,7 +72,7 @@
 A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-server`, started with `service mysql start`). It does not survive between tool calls: always start it in the same command as the work. Using it turned several "verified from documentation" claims into "reproduced" ones and caught two wrong predictions of my own (plan choice; UNION DISTINCT behavior). Module 3 also used real RocksDB through `pip install rocksdict` and read InnoDB page headers straight from the .ibd file. Background processes do not survive between tool calls, so start MySQL in the same command as the experiment.
 
 ## Next up
-1. Module 4 (encoding and evolution), Lessons 28–32. The learner redirected the 2026-11-22 session to finish Module 3 first; Module 4 remains planned. Do not require another learning assessment before delivering the planned lessons.
+1. Module 5 (replication), Lessons 33–41. Module 4 was completed after Module 3 at the learner's request on 2026-11-22. Do not infer learner mastery from delivery; do not require another assessment before building the next outlined module.
 2. Lessons learned: when a quick probe contradicts the intended story, the model or the claim is wrong, not the probe. MySQL's range boundary used the column after the range (92 entries, not 100); Redis restart settings differed from runtime settings; tiny compressed chunks grew with codec overhead. Preserve those observations.
 3. New experiment environment: macOS host, Linux/arm64 Docker containers, isolated Python 3.14 venv. The older sandbox notes above describe historical experiments, not requirements for the current machine. Temporary containers have no published ports and are removed after verification. Do not connect experiments to the learner's existing servers.
 
@@ -76,3 +82,11 @@ A real MySQL 8.0.46 was installed in the build sandbox (`apt-get install mysql-s
 - Parquet column-chunk metadata provides encoded sizes and group eligibility, not actual device read counts. Sorted and shuffled layouts also compress differently.
 - Batch dispatch counts do not measure CPU instructions, SIMD usage or latency.
 - Keep all teaching models explicitly limited; real engine results live in committed fixtures, with reproduction scripts.
+
+## Measurement lessons from Module 4
+- Loading a Python exact-integer observation from a JSON fixture into JavaScript Number can round the evidence itself. The new test checks the literal 9007199254740993 token separately.
+- Proto3 optional presence was chosen deliberately for the byte examples: explicit zero and empty string are serialized. Do not imply the same omission behavior for implicit-presence scalars.
+- Binary Protobuf normal editing preserves our unknown currency; reconstructing known fields or converting the old message through JSON drops it. New-message ProtoJSON is rejected by the old schema by default.
+- Avro int→long resolution is directional even for small values. The removed-default v1→v2→v3 example passes adjacent backward checks but fails reading v1 with v3.
+- The unit metadata is deliberately ignored by the Avro decoder; semantic assertions establish the sample amount separately from parse success.
+- All migration audits are declared-workload exercises, not registry policy implementations or deployed-fleet guarantees. No MySQL/Kafka integration or latency was measured in Module 4.

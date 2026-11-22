@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Compatibility and rolling upgrades · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-4-checklist.html">Module 4 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 4 · Lesson 30</p><h1>Deploy readers and writers in a safe order</h1>
+<p class="lede">Both releases can pass their own tests and still fail during deployment. The missing tests are the mixed-version pairs.</p>
+<div class="meta"><span>~35 min</span><span>1 deployment lab</span><span>rollback and replay</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Draw the writer/reader matrix, choose a deployment order supported by it, and check the retained-data and rollback paths before switching writers.</div>
+
+<h2>1. Always write the arrows</h2>
+<p>Use compatibility terminology from the reader&rsquo;s point of view. Confluent&rsquo;s documentation defines backward, forward and full compatibility this way:<sup class="c"><a href="#s1">[1]</a></sup></p>
+<div class="table-scroll"><table><thead><tr><th>Property</th><th>Pair that must work</th><th>Question</th></tr></thead><tbody>
+<tr><td>Backward</td><td>old writer → new reader</td><td>Can new code read existing data?</td></tr>
+<tr><td>Forward</td><td>new writer → old reader</td><td>Can old code tolerate new data?</td></tr>
+<tr><td>Full</td><td>Both cross-version pairs</td><td>Can these versions coexist in either direction?</td></tr>
+</tbody></table></div>
+<p>A release tested only against itself covers the diagonal: v1→v1 and v2→v2. A rolling deployment needs the off-diagonal cells too. A database also keeps old records after old processes disappear. A broker may serve an old event during replay long after every producer has upgraded.</p>
+
+<h2>2. The same change can work in one direction</h2>
+<p>Consider flat Avro payment records with id and amount. The actual writer schema accompanies each record in our experiment. These are Avro resolution rules, not universal rules for every format:</p>
+<div class="table-scroll"><table><thead><tr><th>v1 → v2 schema change</th><th>Old writer → new reader</th><th>New writer → old reader</th></tr></thead><tbody>
+<tr><td>amount int → long</td><td>Works: promotion</td><td>Fails: no long-to-int resolution</td></tr>
+<tr><td>Add currency without a default</td><td>Fails: missing reader field</td><td>Works: old reader ignores currency</td></tr>
+<tr><td>Add currency with reader default USD</td><td>Works: default supplied</td><td>Works: old reader ignores currency</td></tr>
+</tbody></table></div>
+<p>Avro specifies type promotion and missing-field resolution.<sup class="c"><a href="#s2">[2]</a></sup> Our real-library experiments check every pair. The long-to-int case fails even when this sample amount, 1,200, fits in an int: resolution checks the declared types. Do not transfer this result to Protobuf&rsquo;s different integer-evolution rules.</p>
+<p>A USD default is appropriate only under the declared historical assumption that old amounts were USD. A default cannot establish a fact that was never true. Compatibility of the representation does not prove the business interpretation.</p>
+
+<h2>3. Try the unsafe deployment first</h2>
+<div class="widget" id="sim-rollout"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> with int→long, deploy the writer first and observe the failure. Reset, deploy the reader first, then the writer. Roll the reader back. Next choose the forward-only change: producer-first works for the live old reader, but the new reader still fails on retained v1 data. Only remove that requirement if you have actually migrated or made all old data unavailable to that reader.</p>
+<p>The widget changes role versions instantly; it does not model an entire fleet. A real rollout can contain multiple active readers and writers at once. Include every required pair, and both directions of a request/response service.</p>
+
+<h2>4. Separate accepting a representation from emitting it</h2>
+<p>A useful deployment sketch has distinct steps:</p>
+<ol><li><b>Prepare readers.</b> Deploy code that can accept old and new representations while writers keep emitting the old form.</li><li><b>Verify coverage.</b> Include background workers, rarely invoked jobs, historical data and the code version available for rollback.</li><li><b>Activate writers.</b> Start emitting the new form only when every required reader can handle it.</li><li><b>Retire old handling deliberately.</b> Account for retained records, backups, queued work and the rollback window before removing support.</li></ol>
+<p>This reader-first sketch needs backward-compatible new readers and a compatible rollback target. If the current change does not supply them, build a transitional representation, migrate old data or isolate a new versioned dataflow. Do not solve a missing matrix cell by assuming deployment is instantaneous.</p>
+<p>Amazon&rsquo;s rollback-safety article describes separating preparation from activation and testing transitions, not merely stable versions.<sup class="c"><a href="#s3">[3]</a></sup> Our deployment steps apply that idea to this course&rsquo;s examples.</p>
+
+<h2>5. Code rollback does not roll back bytes</h2>
+<p>If v2 has written records that v1 cannot read, replacing v2 binaries with v1 does not undo those records. That can turn a routine rollback into an outage. A rollback target may need to be a prepared release that reads both forms, while still writing the old form.</p>
+<p>For a database column rename, the same reasoning suggests an expand/migrate/contract plan: add the new location, support both during transition, migrate with a consistent concurrent-write protocol, switch readers and writers, then remove the old location after the retention and rollback obligations end. This is a design sketch, not a claim that dual writes are automatically atomic; revisit <a href="0002-what-if-it-dies-right-here.html">Lesson 2</a> at every boundary.</p>
+<p>Registration policies add another dimension: which schema versions are checked? Adjacent compatibility does not generally establish compatibility with all retained history. <a href="0032-lab-evolve-a-schema.html">Lesson 32</a> gives a concrete three-version counterexample.</p>
+
+<h2>6. Check yourself</h2><div class="quiz" data-lesson-id="0030"></div><script type="application/json" id="quiz-data">[
+{"q":"Which arrow expresses backward compatibility for a proposed v2 reader?","options":["New writer into old reader","Old writer into new reader","New writer into new writer","Old reader into old reader"],"answer":1,"why":"Backward means new readers can read data written by old writers. Write the arrow to avoid reversing the terminology."},
+{"q":"Avro amount changes from int to long. Which deployment order avoids the mixed-version decode failure in this example?","options":["Activate new writers before readers","Upgrade every producer without inspection","Deploy both roles without ordering","Prepare new readers before writers"],"answer":3,"why":"The new long reader accepts old int data. The old int reader cannot resolve new long data, so reader preparation comes first."},
+{"q":"All running processes are v2. Why might a v2 reader still need backward compatibility?","options":["Stored records can outlive processes","Old field names disappear automatically","Every deployment rewrites every record","Broker retention guarantees current schemas"],"answer":0,"why":"Database rows, retained events, backups and queued work can preserve records written by older versions."},
+{"q":"v2 has written bytes that v1 cannot read. What does rolling the code back to v1 accomplish?","options":["It automatically migrates stored bytes","It automatically deletes incompatible records","It restores an incompatible reader","It preserves every new interpretation"],"answer":2,"why":"The bytes remain. A rollback plan must account for data already emitted, often using a prepared compatible rollback release."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: review a rollout (20 minutes)</b></summary><p>For one schema change, draw all active and historical writer/reader pairs. Identify the first point new bytes can appear, the oldest retained writer schema and the rollback reader. State evidence for each required cell.</p></details>
+<p>Ask the course agent to challenge a deployment order; include retention and the actual rollback target.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Confluent, <a href="https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html">Schema Evolution and Compatibility</a>. Read the direction definitions and upgrade-order section.</li><li id="s2">Primary: Apache Avro 1.12.0, <a href="https://avro.apache.org/docs/1.12.0/specification/#schema-resolution">Schema Resolution</a>. Browser and library examples use its flat-record subset.</li><li id="s3">Primary practitioner account: AWS Builders&rsquo; Library, <a href="https://aws.amazon.com/builders-library/ensuring-rollback-safety-during-deployments/">Ensuring rollback safety during deployments</a>.</li><li>Own executed pairs: <a href="../experiments/encoding/results.json">encoding fixtures</a>. The widget audits decode compatibility; it does not emulate a schema registry or certify business semantics.</li></ol>
+<div class="pager"><a href="0029-schema-based-binary-formats.html">Lesson 29: Binary formats</a><a href="0031-dataflow-through-systems.html">Lesson 31: Dataflow boundaries</a></div><footer class="foot">Original course material, grounded in the public sources cited.</footer></main><script src="../assets/sim-encoding.js"></script><script src="../assets/sim-evolution.js"></script><script src="../assets/ui-encoding.js"></script></body></html>

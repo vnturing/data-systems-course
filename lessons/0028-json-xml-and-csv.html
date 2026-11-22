@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>JSON, XML and CSV at the boundary · Data Systems Field Course</title>
+<link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script>
+</head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-4-checklist.html">Module 4 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 4 · Lesson 28</p>
+<h1>JSON, XML and CSV are contracts too</h1>
+<p class="lede">A successful parse can silently change an identifier. Encoding is a boundary between two programs, each with its own types and assumptions.</p>
+<div class="meta"><span>~30 min</span><span>2 interactives</span><span>real parser behavior</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Write a boundary contract that preserves identifiers, money, missing values and binary data across languages, and test the receiver rather than trusting the appearance of the payload.</div>
+
+<h2>1. The identifier that parses incorrectly</h2>
+<pre><code>{"id":9007199254740993}</code></pre>
+<p>A producer with arbitrary-precision integers can write this exact token. JavaScript&rsquo;s ordinary JSON parser turns it into the Number <code>9007199254740992</code>. Nothing throws. A lookup, dedupe key or signature based on the parsed ID can now refer to something else.</p>
+<p>JSON permits numeric syntax; it does not require every receiver to implement arbitrary precision. RFC 8259 identifies integers from −(2<sup>53</sup>−1) through 2<sup>53</sup>−1 as interoperable with common binary64 implementations.<sup class="c"><a href="#s1">[1]</a></sup> That is an interoperability bound, not a rule that every integer above it is unrepresentable.</p>
+<div class="widget" id="sim-json-probe"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> predict the received value for the numeric ID, then the quoted ID. Compare null with a missing field. Finally try duplicate keys and decimal arithmetic. These run the browser&rsquo;s JSON parser, not a simulation of it. The independent Python experiment retains the large integer exactly, demonstrating why a same-language round trip can miss the problem.</p>
+
+<h2>2. Put meaning next to the type</h2>
+<p>For this course&rsquo;s payment example, a useful contract is:</p>
+<pre><code>{"id":"9007199254740993","amount_minor":1200,"currency":"USD"}
+
+id: decimal digits, exact text identity; do not convert through Number
+amount_minor: integer minor units, bounded to the agreed safe range
+currency: explicit code; amount 1200 USD means USD 12.00 here</code></pre>
+<p>This is our application design, not a property of JSON. An integer amount still needs a unit, range, sign policy and currency. A decimal string can preserve a decimal value, but the receiving code still needs appropriate arithmetic. Quoting 0.1 does not make a later conversion to binary floating point exact.</p>
+<p>Likewise, a PATCH API might define an absent name as &ldquo;leave unchanged&rdquo; and null as &ldquo;clear it&rdquo;. Another API may reject null. Decide and test that distinction. Duplicate object names need an explicit rejection policy if ambiguity matters: this browser keeps the last tier, while RFC 8259 describes differing parser behavior.<sup class="c"><a href="#s1">[1]</a></sup></p>
+
+<h2>3. Text length is not wire length</h2>
+<p>The name Zoë is three Unicode code points and four UTF-8 bytes. JavaScript string length counts UTF-16 code units; an emoji can occupy two such units. When a binary format prefixes a string length, you must know whether it counts bytes or characters.</p>
+<div class="widget" id="sim-text-bytes"><noscript>This interactive needs JavaScript.</noscript></div>
+<p>JSON has no separate arbitrary-bytes type. A common contract represents bytes using Base64, identifying which alphabet and padding rules apply. Base64 encodes each three input bytes as four characters, with padding for a partial final group; its padded length is 4 × ceil(bytes/3).<sup class="c"><a href="#s2">[2]</a></sup> Zoë&rsquo;s four UTF-8 bytes become eight Base64 characters, before JSON quotes or a field name. This is encoding overhead, not compression.</p>
+
+<h2>4. XML has richer types when you use a schema</h2>
+<pre><code>&lt;payment&gt;&lt;id&gt;9007199254740993&lt;/id&gt;&lt;amount&gt;12.00&lt;/amount&gt;&lt;/payment&gt;</code></pre>
+<p>Reading element text alone gives strings. XML Schema can declare decimal, integer and binary datatypes, including base64Binary.<sup class="c"><a href="#s3">[3]</a></sup> &ldquo;XML only has strings&rdquo; overlooks that layer. Conversely, a schema declaration does not prove the application uses a validating reader or an exact decimal representation. Inspect the actual parser, binding and application conversion.</p>
+<p>The decision is where the contract lives and who enforces it. JSON can also have an external schema; CSV can have a documented typed import contract. A human-readable format does not remove the schema assumptions from the programs.</p>
+
+<h2>5. CSV records are not necessarily lines</h2>
+<pre><code>150,"Doe, Jane","line one
+line two"</code></pre>
+<p>This is one record with three fields. Splitting on commas gives four pieces; splitting on newlines gives fragments of a record. RFC 4180 documents quoting commas, line breaks and embedded double quotes.<sup class="c"><a href="#s4">[4]</a></sup> Our <a href="../experiments/encoding/verify.py">Python experiment</a> parses this with the standard CSV reader and records both correct and naive results.</p>
+<p>CSV also needs agreement on headers, delimiter dialect, encoding, null versus empty, dates and numeric interpretation. If an import turns a leading-zero account number into a number, the CSV parser may have worked while the import contract failed. Test the complete path into the destination type.</p>
+
+<h2>6. Check yourself</h2>
+<div class="quiz" data-lesson-id="0028"></div><script type="application/json" id="quiz-data">[
+{"q":"Python emits an exact large integer, but ordinary browser JSON parsing rounds it. Which test would catch this?","options":["Read it in the receiver","Pretty-print it at the producer","Compress it before sending bytes","Rename its key before sending"],"answer":0,"why":"A producer-only round trip checks its own number model. You need the actual receiving parser and destination type."},
+{"q":"An API uses missing name for no change and null for clearing. What protects that distinction?","options":["Assuming every parser treats identically","Always replacing both with strings","Specifying and testing application semantics","Removing the field during validation"],"answer":2,"why":"Both shapes are valid JSON, but their meaning belongs to the application contract. A mapper that merges them loses information."},
+{"q":"Zoë occupies four UTF-8 bytes. How many characters does padded Base64 need for those bytes?","options":["Exactly three characters before framing","Exactly four characters before framing","Exactly six characters before framing","Exactly eight characters before framing"],"answer":3,"why":"Padded Base64 uses four characters per three input bytes rounded up. Four bytes need two groups, hence eight characters."},
+{"q":"A quoted CSV field includes a comma and a newline. What should process it?","options":["A comma split per line","A parser for that dialect","A newline split per record","A binary integer field decoder"],"answer":1,"why":"Quoted separators and line breaks belong to the field. A CSV parser handles the record grammar; typed import validation is another step."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: audit one payload (15 minutes)</b></summary><p>Take a boundary you own. List identifier type/range, amount units, missing/null behavior, binary representation and receiver library. Test a large integer, a leading-zero ID, non-ASCII text and a multiline CSV field where applicable. Use scratch data.</p></details>
+<p>Ask the course agent about any unexpected received value. Include the literal bytes and both language types.</p>
+<h2>Sources and next reading</h2><ol class="sources">
+<li id="s1">Primary: <a href="https://www.rfc-editor.org/rfc/rfc8259.html">RFC 8259</a>, sections 4 and 6. Start with its interoperability discussion.</li>
+<li id="s2">Primary: <a href="https://www.rfc-editor.org/rfc/rfc4648.html">RFC 4648</a>, Base64 encoding.</li>
+<li id="s3">Primary: W3C, <a href="https://www.w3.org/TR/xmlschema-2/">XML Schema Part 2: Datatypes</a>.</li>
+<li id="s4">Primary, informational RFC: <a href="https://www.rfc-editor.org/rfc/rfc4180.html">RFC 4180</a>. It documents a common CSV format, not every dialect.</li>
+<li>Own executed results: <a href="../experiments/encoding/results.json">encoding fixtures</a>. Payment contract and failure scenarios are original course examples.</li></ol>
+<div class="pager"><a href="0027-materialized-views-and-data-cubes.html">Lesson 27: Views and cubes</a><a href="0029-schema-based-binary-formats.html">Lesson 29: Binary formats</a></div>
+<footer class="foot">Original course material, grounded in the public sources cited.</footer></main><script src="../assets/sim-encoding.js"></script><script src="../assets/ui-encoding.js"></script></body></html>

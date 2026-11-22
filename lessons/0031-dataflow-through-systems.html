@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Dataflow through databases, services and brokers · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-4-checklist.html">Module 4 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 4 · Lesson 31</p><h1>Follow the bytes through the whole dataflow</h1>
+<p class="lede">A reader can understand enough to make its own change and still erase data it never understood. Compatibility must survive the whole path.</p>
+<div class="meta"><span>~35 min</span><span>1 round-trip lab</span><span>database, service and broker paths</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Find every serializer, reader and rewriting intermediary in a dataflow; test unknown-field preservation; and include request, response and historical replay in a compatibility review.</div>
+
+<h2>1. The old writer hiding inside a read</h2>
+<pre><code>new producer → stored bytes → old updater → rewritten bytes → new reader
+  currency EUR                knows only id/name            currency ?</code></pre>
+<p>The producer writes an account with currency EUR. An old profile service loads it and changes the name. It never uses currency. If it constructs a new record containing only id and name, the new reader receives a record with currency absent. A fallback to USD would change the interpretation of a EUR account.</p>
+<p>This is a data-loss path even when both parsers report success. Test <b>new → old → new</b> round trips, not only whether the old reader can accept a new record.</p>
+<div class="widget" id="sim-dataflow"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> compare rebuilding known fields, editing while retaining unknown binary fields, and forwarding bytes unchanged. The last preserves everything but performs no name update. Retaining unfamiliar data does not mean the old application understands its business meaning.</p>
+
+<h2>2. What the real libraries did</h2>
+<p>Modern Protobuf binary messages preserve unknown fields on normal parse/reserialize paths. Reconstructing field by field or passing through JSON can drop them; the official guide calls out both cases.<sup class="c"><a href="#s1">[1]</a></sup> We ran those paths with Python Protobuf 6.33.5:</p>
+<div class="table-scroll"><table><thead><tr><th>Old intermediary action</th><th>New reader sees</th></tr></thead><tbody>
+<tr><td>Forward bytes unchanged</td><td>Zoë, currency EUR</td></tr>
+<tr><td>Edit the binary message name</td><td>Zoe, currency EUR</td></tr>
+<tr><td>Rebuild only known fields</td><td>Zoe, currency absent</td></tr>
+<tr><td>Serialize old message to ProtoJSON and back</td><td>Zoe, currency absent</td></tr>
+</tbody></table></div>
+<p>A separate test sends new-message ProtoJSON directly to the old schema: its parser rejects the unfamiliar currency field by default. ProtoJSON&rsquo;s compatibility and unknown-field behavior differs from binary Protobuf.<sup class="c"><a href="#s2">[2]</a></sup> &ldquo;We use Protobuf&rdquo; is insufficient information if a gateway changes its representation.</p>
+
+<h2>3. Database paths persist both time and old assumptions</h2>
+<p>In a MySQL application storing a serialized blob or JSON document, find every read-modify-write operation. A service that rewrites the entire value from an old object model can lose new fields. A narrow update that intentionally preserves the rest is a different path, and needs its own concurrency and atomicity reasoning.</p>
+<p>Avro resolution can ignore fields the reader does not request. That is useful for reading, but the resolved old object alone is insufficient to recreate every field of the original newer record. Preserve the original data or adopt an explicit update protocol if round-trip preservation is required. Unknown-field retention in one format is not a universal property of all serializers.</p>
+<p>Also retain the ability to interpret long-lived bytes. A code rollout does not rewrite old rows; a restored backup can resurrect much older writer schemas. Decide which schema history and migration code the recovery plan needs.</p>
+
+<h2>4. Services have two compatibility arrows</h2>
+<pre><code>request:   client writer → server reader
+response:  server writer → client reader</code></pre>
+<p>For REST/JSON, inspect validation, generated clients, unknown-field policies, enums and missing/null handling in both directions. For RPC, inspect the serialized messages and the service interface. gRPC defines services and callable methods in addition to their request and response messages.<sup class="c"><a href="#s3">[3]</a></sup> A message that decodes does not prove that an old server implements a newly introduced method.</p>
+<p>A schema also does not erase remote failure semantics. The server can complete an action while the caller times out. <a href="0001-the-timeout-problem.html">Lesson 1&rsquo;s idempotency contract</a> still applies. Encoding compatibility and retry safety are separate checks.</p>
+
+<h2>5. Brokers extend the version overlap</h2>
+<p>For a Kafka dataflow, include the producer serializer, consumer deserializer and any service that transforms or republishes records. A replaying consumer may need records from several past producer releases. A dead-letter queue or backup archive can outlive ordinary topic retention. State those paths explicitly instead of assuming that only today&rsquo;s producer matters.</p>
+<p>Registry-backed serializers provide another dependency: consumers must identify and obtain the relevant schema. Confluent documents its supported formats and serialization framing; those are properties of that serializer ecosystem, not of every Kafka record.<sup class="c"><a href="#s4">[4]</a></sup> AWS Glue likewise supplies a registry and SerDe integrations for supported streaming applications.<sup class="c"><a href="#s5">[5]</a></sup> Do not assume the two use identical envelopes or policy names.</p>
+<p>A registry can check supported structural compatibility rules. It does not automatically configure every application to use its serializer, preserve schema history forever, or detect that amount silently changed from cents to dollars.</p>
+
+<h2>6. A review sheet for one real path</h2>
+<ol><li>List each hop&rsquo;s encoding, schema source and deployed versions.</li><li>Mark every node that only reads, passes bytes through, or decodes and rewrites.</li><li>Test unfamiliar fields through every rewriting path.</li><li>Check both request/response arrows and every retained-history replay reader.</li><li>State units, fallback semantics, rollback behavior and recovery dependencies separately.</li></ol>
+<p>The browser lab runs actual subset wire transformations. It does not contact MySQL, Kafka, a registry or a service, and proves no transport delivery or concurrency guarantee.</p>
+
+<h2>7. Check yourself</h2><div class="quiz" data-lesson-id="0031"></div><script type="application/json" id="quiz-data">[
+{"q":"An old updater parses a new record, then rebuilds it using only known fields. What can fail despite successful parsing?","options":["The network must lose packets","The schema automatically renumbers fields","The original producer stops running","Unfamiliar fields can be discarded"],"answer":3,"why":"Acceptance and round-trip preservation are distinct. Test new→old→new, including the updater's actual serialization path."},
+{"q":"Which compatibility arrows belong in a request/response API review?","options":["Only client writes into server","Both request and response directions","Only server writes into client","Neither direction with generated clients"],"answer":1,"why":"The client writes requests the server reads; the server writes responses the client reads. Each direction can contain a mixed-version pair."},
+{"q":"A consumer rewinds a retained topic. Which writer versions must its compatibility tests include?","options":["Those present in retained history","Only today's deployed producer version","Only its own reader version","Only the broker's protocol version"],"answer":0,"why":"Old bytes remain after their writers disappear. Replay obligations depend on the history the consumer can actually encounter."},
+{"q":"A registry accepts an unchanged integer field whose unit changed from cents to dollars. What remains unchecked?","options":["Whether the schema has fields","Whether the record contains integers","Whether its meaning stayed correct","Whether the registry has versions"],"answer":2,"why":"Structural compatibility cannot infer an undeclared unit change. Business interpretation needs a separate contract and assertion."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: trace one field (20 minutes)</b></summary><p>Follow a field from an API request into MySQL and a Kafka consumer. Mark all mappings and rewrites. Introduce an unfamiliar field in scratch data and inspect the final record. Include a replay and a response client in your review.</p></details>
+<p>Ask the course agent to review your hop diagram, especially any intermediary that reads and writes.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Protobuf, <a href="https://protobuf.dev/programming-guides/proto3/#unknowns">Unknown Fields</a>. Start with retaining unknown fields.</li><li id="s2">Primary: Protobuf, <a href="https://protobuf.dev/programming-guides/json/">ProtoJSON Format</a>, unknown fields and wire safety.</li><li id="s3">Primary: gRPC, <a href="https://grpc.io/docs/what-is-grpc/core-concepts/">Core concepts, architecture and lifecycle</a>.</li><li id="s4">Primary: Confluent, <a href="https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html">Formats, Serializers, and Deserializers</a>.</li><li id="s5">Primary: AWS, <a href="https://docs.aws.amazon.com/glue/latest/dg/schema-registry.html">Glue Schema Registry</a>.</li><li>Own round trips: <a href="../experiments/encoding/results.json">executed fixtures</a>. Database and broker scenarios are design examples, not integration measurements.</li></ol>
+<div class="pager"><a href="0030-compatibility-and-rolling-upgrades.html">Lesson 30: Rolling upgrades</a><a href="0032-lab-evolve-a-schema.html">Lesson 32: Evolution lab</a></div><footer class="foot">Original course material, grounded in the public sources cited.</footer></main><script src="../assets/sim-encoding.js"></script><script src="../assets/sim-dataflow.js"></script><script src="../assets/ui-encoding.js"></script></body></html>

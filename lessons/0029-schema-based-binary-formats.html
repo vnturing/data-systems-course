@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Schema-based binary formats · Data Systems Field Course</title><link rel="stylesheet" href="../assets/course.css"><script src="../assets/theme.js"></script></head><body>
+<div class="topbar"><a class="brand" href="../index.html">Data Systems Field Course</a><a href="../syllabus.html">Syllabus</a><a href="../reference/module-4-checklist.html">Module 4 checklist</a><span class="spacer"></span><button id="theme-btn" type="button">theme</button></div>
+<main><p class="kicker">Module 4 · Lesson 29</p><h1>Field tags or writer schemas?</h1>
+<p class="lede">Protobuf and Avro both move names out of the record bytes. They make different promises about what a reader needs in order to understand what remains.</p>
+<div class="meta"><span>~35 min</span><span>1 byte inspector</span><span>real library cross-checks</span><span>4-question check</span></div>
+<div class="callout win"><b class="t">What you can do after this lesson</b>Walk through a small Protobuf and Avro record, explain how unfamiliar fields are handled, and name the schema information the receiving system must retain.</div>
+
+<h2>1. Start with one logical record</h2>
+<pre><code>{"id":150,"name":"Zoë"}
+
+// Protobuf (proto3, explicit presence)
+message Account {
+  optional uint32 id = 1;
+  optional string name = 2;
+}
+
+// Avro
+{"type":"record","name":"Account","fields":[
+  {"name":"id","type":"long"},
+  {"name":"name","type":"string"}
+]}</code></pre>
+<p>We choose a nonnegative ID that fits both types. Protobuf uint32 and Avro long are not equivalent integer domains. Their common sample makes their encodings comparable without implying identical type systems.</p>
+
+<h2>2. Protobuf carries a field number and a wire type</h2>
+<pre><code>08 96 01 12 04 5a 6f c3 ab
+|  |     |  |  |-----------|
+|  150   |  4  UTF-8 Zoë
+tag 1    tag 2, length-delimited</code></pre>
+<p>The key is (field number &lt;&lt; 3) | wire type. <code>08</code> identifies field 1 using varint representation. The payload <code>96 01</code> stores 150 in seven-bit groups with continuation bits. <code>12</code> identifies field 2 using length-delimited representation; <code>04</code> is its byte count.<sup class="c"><a href="#s1">[1]</a></sup></p>
+<p>The wire type is a coarse structural hint. Length-delimited bytes could be a string, nested message or other data. Field numbers and a schema give those bytes their meaning. Tags do not make Protobuf fully self-describing.</p>
+<p>An old reader can skip the structure of an unfamiliar field. Modern proto3 binary messages also retain unknown fields for reserialization, but field-by-field reconstruction or JSON conversion can lose them.<sup class="c"><a href="#s2">[2]</a></sup> We will test that full round trip in Lesson 31.</p>
+
+<h2>3. Avro uses the writer schema to locate values</h2>
+<pre><code>ac 02 08 5a 6f c3 ab
+|----| |  |-----------|
+ 150   4   UTF-8 Zoë
+zigzag integer encoding also applies to the string's byte length</code></pre>
+<p>The record bytes contain neither field names nor per-field tags. The writer schema establishes field order and types. Avro encodes signed integers with zigzag plus variable-length encoding: nonnegative 150 maps to unsigned 300, or <code>ac 02</code>. A four-byte string length maps to 8, or <code>08</code>.<sup class="c"><a href="#s3">[3]</a></sup></p>
+<p>The reader can then resolve the writer schema against its own schema: matching named fields, ignoring unwanted writer fields, and supplying reader defaults where permitted. The two schemas serve different roles. You cannot generally decode old bytes by substituting today&rsquo;s schema for the actual writer schema.</p>
+<div class="widget" id="sim-wire"><noscript>This interactive needs JavaScript.</noscript></div>
+<p><b>Try:</b> move the ID from 127 to 128, change the name to an emoji, then add currency. Watch what the old readers expose. The default bare sizes are JSON 24, Protobuf 9 and Avro 7 bytes. These exact bytes match independently executed Python libraries, including explicit zero/empty values and non-ASCII text.</p>
+
+<h2>4. Evolution rules follow the identity mechanism</h2>
+<p>For Protobuf binary, a field&rsquo;s number identifies it across versions. Renaming the source field while retaining its tag can preserve the binary mapping, but JSON names are another boundary. Reusing a deleted number for a new meaning can make old bytes look valid under the new interpretation. Reserve deleted numbers and names instead of recycling them.<sup class="c"><a href="#s2">[2]</a></sup> Our real-library probe reuses name&rsquo;s tag for email and reads Zoë as an email value without a wire error.</p>
+<p>Avro instead resolves field names using the two schemas, with alias rules available in the format. Reordering fields is not permission to read bytes in the new order: the actual writer schema still describes the old order. A reader-only field needs a suitable default to read records written without it. That default is not a value retroactively stored in old records.</p>
+
+<h2>5. Count the system, not only the payload</h2>
+<p>Avro object container files can carry their writer schema; messaging systems can identify schemas through a registry or another agreed envelope. Protobuf consumers normally obtain their schema through generated code or descriptors. Schema lookup, distribution and retention are part of the design even when they cost zero bytes in this tiny inspector.</p>
+<p>The size comparison excludes those mechanisms, framing, compression and CPU work. It is not a benchmark or a recommendation to change formats. A reader that lacks the schema can fail on a seven-byte payload just as thoroughly as on a seven-megabyte one.</p>
+<p>Our codecs cover flat Avro records with int/long/string and singular Protobuf uint32/string using wire types 0 and 2. They omit unions, nested messages, aliases, enums, most wire types and full-range int64 values. They exist to expose these mechanisms; use real libraries for applications.</p>
+
+<h2>6. Check yourself</h2><div class="quiz" data-lesson-id="0029"></div><script type="application/json" id="quiz-data">[
+{"q":"An old Protobuf binary reader sees an unfamiliar field number. What lets it locate the next field?","options":["Every record includes field names","The schema lists all senders","Its wire type describes structure","The JSON mapping sorts fields"],"answer":2,"why":"The wire type supplies enough structural information to skip or retain unfamiliar field bytes. It does not give their application meaning."},
+{"q":"What must describe the field order of an old Avro record?","options":["The actual writer schema used","Only the latest reader schema","The current source-language property order","The database's latest table layout"],"answer":0,"why":"Bare Avro bytes follow the writer schema. A reader schema describes the desired result and participates in resolution; it does not replace the writer schema."},
+{"q":"A team deletes name at tag 2, then gives tag 2 to email. What can happen to old bytes?","options":["They always fail checksum validation","They automatically receive new tags","They recover the deleted schema","They acquire an unintended meaning"],"answer":3,"why":"Old name bytes can parse under the new string field. Keeping the wire type does not preserve semantics; reserve deleted numbers instead."},
+{"q":"The inspector's Avro payload is seven bytes. What does this tell you about total system cost?","options":["It includes every schema lookup","It excludes distribution and framing","It proves fastest possible decoding","It measures production request latency"],"answer":1,"why":"This is the bare record encoding. Schema distribution, envelope bytes, compression, CPU cost and operational trade-offs are excluded."}
+]</script><script src="../assets/quiz.js"></script>
+<details class="callout"><summary><b>Optional: inspect a small message (20 minutes)</b></summary><p>Use a scratch schema and the reproduction script. Identify tags or writer field order, inspect non-ASCII length prefixes, and show how the receiver obtains the schema. Include envelope bytes when comparing total sizes.</p></details>
+<p>Ask the course agent to walk through any unfamiliar byte. State the encoding and both schemas.</p>
+<h2>Sources and next reading</h2><ol class="sources"><li id="s1">Primary: Protobuf, <a href="https://protobuf.dev/programming-guides/encoding/">Encoding</a>. Start with its small-message example.</li><li id="s2">Primary: Protobuf, <a href="https://protobuf.dev/programming-guides/proto3/">proto3 language guide</a>, updating messages and unknown fields.</li><li id="s3">Primary: Apache Avro 1.12.0, <a href="https://avro.apache.org/docs/1.12.0/specification/">Specification</a>, binary encoding and schema resolution.</li><li>Own verification: <a href="../experiments/encoding/README.md">experiment instructions</a> and <a href="../experiments/encoding/results.json">real-library fixtures</a>. Simple message bytes can match exactly; Protobuf serialization in general is not a canonical byte representation.</li></ol>
+<div class="pager"><a href="0028-json-xml-and-csv.html">Lesson 28: Text formats</a><a href="0030-compatibility-and-rolling-upgrades.html">Lesson 30: Rolling upgrades</a></div><footer class="foot">Original course material, grounded in the public sources cited.</footer></main><script src="../assets/sim-encoding.js"></script><script src="../assets/ui-encoding.js"></script></body></html>

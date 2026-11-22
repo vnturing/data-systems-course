@@ -147,6 +147,38 @@ The primary documents below were opened during this session. Claims in the new l
   Primary. WITH ROLLUP syntax and GROUPING to distinguish subtotal NULLs. Cross-checked by the committed MySQL output. Use for: Lesson 27.
 - Own experiments: `experiments/storage/indexes.sql`, `redis_persistence.py`, `analytics.py`, and the corresponding committed `results/` fixtures. These establish specific access counts, process-recovery outcomes, encoded sizes and query results; they do not establish production latency or power-failure durability.
 
+### Added 2026-11-22 (Module 4, Lessons 28 to 32)
+
+Primary pages below were opened and their relevant format/evolution rules checked. Actual examples were independently executed with Avro 1.12.0 and Protobuf 6.33.5; see `experiments/encoding/`. The browser models are explicitly narrower than these specifications.
+
+- [Standard: RFC 8259, JSON](https://www.rfc-editor.org/rfc/rfc8259.html)
+  Primary. Number interoperability and duplicate-name behavior. JavaScript JSON.parse and Python json.loads were used to expose the exact-integer boundary. Use for: Lesson 28.
+- [Standard: RFC 4648, Base encodings](https://www.rfc-editor.org/rfc/rfc4648.html)
+  Primary. Base64 grouping and padding. Browser output and Python base64 agree on the UTF-8 example. Use for: Lesson 28.
+- [Recommendation: W3C XML Schema Part 2, Datatypes](https://www.w3.org/TR/xmlschema-2/)
+  Primary. XML Schema datatypes, including decimal and base64Binary. No XML-schema validator was benchmarked or implemented. Use for: Lesson 28.
+- [Informational RFC: RFC 4180, Common CSV format](https://www.rfc-editor.org/rfc/rfc4180.html)
+  Primary. Quoted separators, embedded quotes and line breaks; other dialects still require an explicit contract. Python csv example independently executed. Use for: Lesson 28.
+- [Docs: Protobuf Encoding](https://protobuf.dev/programming-guides/encoding/)
+  Primary. Field key, wire types, varints and length-delimited fields. Bare bytes independently cross-checked with dynamic proto3 optional descriptors. Use for: Lesson 29.
+- [Docs: Protobuf proto3 language guide](https://protobuf.dev/programming-guides/proto3/)
+  Primary. Updating messages, reserved tags/names, unknown-field preservation and loss through rebuilding/JSON. Round trips and reused-tag behavior independently executed. Use for: Lessons 29, 31.
+- [Specification: Apache Avro 1.12.0](https://avro.apache.org/docs/1.12.0/specification/)
+  Primary. Binary encoding, writer/reader roles, record defaults and numeric promotion. All nine pairs in six scenarios executed with the real library; not a general registry checker. Use for: Lessons 29, 30, 32.
+- [Docs: Confluent Schema Evolution and Compatibility](https://docs.confluent.io/platform/current/schema-registry/fundamentals/schema-evolution.html)
+  Primary vendor contract. Direction definitions, upgrade ordering, latest-only vs transitive history checks. Registry service behavior was not exercised. Use for: Lessons 30, 32.
+- [Practitioner account: AWS Builders' Library, Ensuring rollback safety during deployments](https://aws.amazon.com/builders-library/ensuring-rollback-safety-during-deployments/)
+  Primary. Preparation/activation and transition testing. The course's rollout workbook is an original application of that reasoning. Use for: Lesson 30.
+- [Docs: Protobuf ProtoJSON Format](https://protobuf.dev/programming-guides/json/)
+  Primary. Unknown fields and format-specific wire compatibility. Old-message JSON conversion drops our unknown field; new-message ProtoJSON into an old reader is rejected by default. Use for: Lesson 31.
+- [Docs: gRPC core concepts](https://grpc.io/docs/what-is-grpc/core-concepts/)
+  Primary. Service/method contract in addition to messages; request/response directions. No transport guarantees were tested. Use for: Lesson 31.
+- [Docs: Confluent formats, serializers and deserializers](https://docs.confluent.io/platform/current/schema-registry/fundamentals/serdes-develop/index.html)
+  Primary. Serializer ecosystem and framing, kept separate from bare wire-byte counts. Use for: Lesson 31.
+- [Docs: AWS Glue Schema Registry](https://docs.aws.amazon.com/glue/latest/dg/schema-registry.html)
+  Primary. Registry/SerDe integrations and compatibility modes including BACKWARD_ALL. No assumption of equivalent framing or policy scope across vendors. Use for: Lessons 31, 32.
+- Own experiments: `experiments/encoding/verify.py` and `results.json`: 70 wire examples, 54 Avro pair outcomes, four Protobuf intermediary paths, tag reuse, ProtoJSON rejection and text parser cases. Schema rules, byte counts and application semantic assertions are distinguished in each lesson.
+
 ## Wisdom (Communities)
 
 - [Papers We Love](https://paperswelove.org)
@@ -165,7 +197,7 @@ The primary documents below were opened during this session. Claims in the new l
 - Module 3 follow-ups: RocksDB universal-compaction docs; the full Bigtable and LSM-tree papers; the English MySQL manual pages for index fill and the doublewrite buffer; Kafka's log segment and index layout (Lesson 22 points to it without verifying); MyRocks documentation; a primary source on SSD write amplification and sequential-vs-random cost for the hardware discussion that this module deliberately left unmeasured.
 - Module 3 optional deeper reading: H-Store/VoltDB main-memory architecture; Kimball/Inmon dimensional modeling; Abadi et al. column-store survey; Parquet page indexes and actual I/O tracing. Core sources for Lessons 23–27 are now verified above; real host/power-failure testing and production concurrency/latency benchmarks remain unperformed.
 
-- Module 4 sources still to verify fully before writing lessons: JSON number/duplicate-name interoperability (RFC 8259), XML Schema datatypes, CSV quoting (RFC 4180), Protobuf binary/JSON compatibility and unknown-field retention, Avro writer/reader schema resolution, registry transitive checks, rollback-safe deployment and retained-history replay. Some were opened during the initial 2026-11-22 Module 4 investigation, but no Module 4 lesson or mastery record was created after the learner redirected to Module 3.
+- Module 4 deeper follow-ups: general Avro unions, aliases, logical types and schema validation; Protobuf enums/oneof and integer widening; real registry policy integration and outage/recovery testing; concurrency-safe database migrations and full request/response compatibility tests. The core Lessons 28–32 sources and real-library examples are now verified above.
 
 - Module 2 follow-ups: MySQL 8.4 LTS / 9.x behavior of the features used (JSON validation, multi-valued indexes, hash join, EXPLAIN ANALYZE); the DynamoDB adjacency-list and GSI pages; the full Stonebraker/Pavlo benchmark tables; the Neo4j/Cypher manual for the variable-length path syntax shown as a sketch; histogram statistics in MySQL (column statistics) for the correlated-predicates discussion; Mongo document size limit and MySQL's JSON size limit.
 

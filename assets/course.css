@@ -104,4 +104,7 @@ footer.foot{margin-top:4rem;border-top:1px solid var(--rule);padding-top:1rem;fo
 .widget input[type="range"]{max-width:100%;vertical-align:middle}
 .widget output{font-variant-numeric:tabular-nums;font-weight:600}
 .widget label{min-width:0;max-width:100%}
+.widget input[type="text"],.widget input[type="number"]{max-width:100%;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--rule);border-radius:4px;padding:.35rem}
+#sim-evolution .matrix th,#sim-evolution .matrix td{padding:.3rem}
+#sim-evolution .ev-cell{font-size:.78rem;padding:.3rem;min-height:2.4rem}
 @media print{.topbar,.widget .btn,.pager,.no-print{display:none!important}body{background:#fff;color:#000}main{max-width:none;padding:0}html{font-size:11pt}}
